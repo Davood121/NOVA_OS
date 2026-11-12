@@ -51,8 +51,8 @@ uint64_t mem_usable_bytes(void);
 /* ---- memory management (v0.3) ---- */
 void pmm_init(void);
 uint32_t pmm_alloc_frame(void);
-uint32_t pmm_alloc_frames(uint32_t count);
 void pmm_free_frame(uint32_t paddr);
+uint32_t pmm_alloc_frames(uint32_t count);
 uint32_t pmm_total_frames(void);
 uint32_t pmm_used_frames(void);
 uint32_t pmm_free_frames_count(void);
@@ -88,6 +88,21 @@ uint32_t blkcache_hits(void);
 uint32_t blkcache_misses(void);
 uint32_t blkcache_dirty_count(void);
 uint32_t blkcache_total_blocks(void);
+
+/* ---- fs (transaction-log store, v0.5) ---- */
+void fs_init(void);
+int fs_create(const char *name);
+int fs_write(const char *name, const void *data, uint32_t len);
+int fs_read(const char *name, void *buf, uint32_t max);
+int fs_delete(const char *name);
+int fs_exists(const char *name);
+int fs_format_force(void);
+int fs_ready_state(void);
+uint32_t fs_file_count(void);
+uint32_t fs_log_next(void);
+uint32_t fs_capacity_sectors(void);
+void fs_print_info(void);
+void fs_print_list(void);
 
 /* ---- pit / time ---- */
 void pit_init(void);
