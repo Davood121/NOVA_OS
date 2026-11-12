@@ -1,0 +1,33 @@
+name: Build GRID OS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install 32-bit toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib
+
+      - name: Build image
+        run: make
+
+      - name: Verify image structure
+        run: |
+          test "$(stat -c%s grid-os.img)" -eq 4194304
+          sig=$(od -A n -t x1 -j 510 -N 2 grid-os.img | tr -d ' ')
+          test "$sig" = "55aa" || { echo "bad MBR signature: $sig"; exit 1; }
+          echo "image OK: 4 MB, MBR signature 55AA present"
+
+      - name: Upload bootable image
+        uses: actions/upload-artifact@v4
+        with:
+          name: grid-os-img
+          path: grid-os.img
