@@ -88,6 +88,10 @@ void vunmap(uint32_t vaddr) {
     __asm__ volatile("invlpg (%0)" :: "r"(vaddr) : "memory");
 }
 
+int vmap_ready(void) {
+    return kernel_page_dir != NULL;
+}
+
 void paging_init(void) {
     /* Allocate 4KB page directory */
     uint32_t pd_frame = pmm_alloc_frame();
@@ -123,4 +127,7 @@ void paging_init(void) {
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
     cr0 |= 0x80000001; /* Enable PG and PE */
     __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
+
+    /* From now on, CPU page faults reach the real page-fault handler */
+    exc_register(14, page_fault_handler);
 }
