@@ -112,6 +112,24 @@ uint32_t pmm_alloc_frame(void) {
     return 0; /* Out of memory */
 }
 
+uint32_t pmm_alloc_frames(uint32_t count) {
+    if (count == 0) return 0;
+    uint32_t run = 0;
+    for (uint32_t f = 0; f < total_system_frames; f++) {
+        if (!bitmap_test(f)) {
+            run++;
+            if (run == count) {
+                uint32_t start = f + 1 - count;
+                for (uint32_t k = start; k <= f; k++) bitmap_set(k);
+                return start * PAGE_SIZE;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    return 0; /* No contiguous run large enough */
+}
+
 void pmm_free_frame(uint32_t paddr) {
     uint32_t frame = paddr / PAGE_SIZE;
     /* Never free frames in the first 1MB */
