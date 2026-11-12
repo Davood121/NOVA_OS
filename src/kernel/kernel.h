@@ -79,6 +79,16 @@ int ata_read_sectors(uint32_t lba, uint8_t count, void *buf);
 int ata_write_sectors(uint32_t lba, uint8_t count, const void *buf);
 void ata_print_info(void);
 
+/* ---- block cache (v0.5) ---- */
+void blkcache_init(void);
+void *blk_read(uint32_t lba);
+int blk_write(uint32_t lba, const void *buf);
+int blk_flush(void);
+uint32_t blkcache_hits(void);
+uint32_t blkcache_misses(void);
+uint32_t blkcache_dirty_count(void);
+uint32_t blkcache_total_blocks(void);
+
 /* ---- pit / time ---- */
 void pit_init(void);
 void pit_irq(void);

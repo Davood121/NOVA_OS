@@ -24,6 +24,7 @@ void kmain(void) {
     pit_init();
     rtc_init();
     ata_init();
+    blkcache_init();
     __asm__ volatile("sti");
 
     console_puts("boot ok. interrupts live. type 'help' for commands.\n\n");
