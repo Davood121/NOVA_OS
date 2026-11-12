@@ -42,6 +42,8 @@ static void cmd_help(void) {
         "  hexdump  - display hex view of memory\n"
         "  sleep    - busy-wait sleep in seconds\n"
         "  rand     - pseudo-random 32-bit integer\n"
+        "  atainfo  - detect ata drive\n"
+        "  ataread  - hexdump one disk sector (lba in hex)\n"
         "  uptime   - time since boot\n"
         "  date     - real-time clock date and time\n"
         "  cpuinfo  - cpu vendor and model\n"
@@ -128,6 +130,41 @@ static void cmd_rand(void) {
     console_puts(")\n");
 }
 
+static void cmd_atainfo(void) {
+    ata_print_info();
+}
+
+static void cmd_ataread(const char *args) {
+    static uint16_t sector[256];
+    uint32_t lba = parse_hex(args);
+    if (ata_read_sectors(lba, 1, sector) < 0) {
+        console_puts("ataread: read failed (no drive or io error)\n");
+        return;
+    }
+    console_puts("sector ");
+    console_puthex32(lba);
+    console_puts(":\n");
+    const uint8_t *p = (const uint8_t *)sector;
+    static const char hexchars[] = "0123456789ABCDEF";
+    for (int row = 0; row < 2; row++) {
+        console_puthex32(lba * 512 + row * 16);
+        console_puts(": ");
+        for (int col = 0; col < 16; col++) {
+            uint8_t b = p[row * 16 + col];
+            console_putc(hexchars[(b >> 4) & 0xF]);
+            console_putc(hexchars[b & 0xF]);
+            console_putc(' ');
+        }
+        console_puts(" |");
+        for (int col = 0; col < 16; col++) {
+            char c = (char)p[row * 16 + col];
+            if (c >= 32 && c <= 126) console_putc(c);
+            else console_putc('.');
+        }
+        console_puts("|\n");
+    }
+}
+
 static void cmd_echo(const char *args) {
     console_puts(args);
     console_putc('\n');
@@ -156,6 +193,8 @@ static void exec(char *line) {
     else if (!strcmp(line, "hexdump")) cmd_hexdump(args);
     else if (!strcmp(line, "sleep")) cmd_sleep(args);
     else if (!strcmp(line, "rand")) cmd_rand();
+    else if (!strcmp(line, "atainfo")) cmd_atainfo();
+    else if (!strcmp(line, "ataread")) cmd_ataread(args);
     else if (!strcmp(line, "uptime")) print_uptime();
     else if (!strcmp(line, "date")) print_date();
     else if (!strcmp(line, "cpuinfo")) cpu_print_info();
