@@ -32,6 +32,12 @@ extern isr_stub_t isr_stub_table[48];
 
 static irq_handler_t irq_handlers[IRQ_COUNT];
 
+static exc_handler_t exc_handlers[32];
+
+void exc_register(uint8_t exc, exc_handler_t h) {
+    if (exc < 32) exc_handlers[exc] = h;
+}
+
 void irq_register(uint8_t irq, irq_handler_t h) {
     irq_handlers[irq] = h;
 }
@@ -78,6 +84,10 @@ static const char *exc_name(uint32_t n) {
 void isr_dispatch(void *rp) {
     struct registers *r = rp;
     if (r->int_no < 32) {
+        if (exc_handlers[r->int_no]) {
+            exc_handlers[r->int_no](r);
+            return;
+        }
         console_set_color(0x0C);
         console_puts("\nKERNEL PANIC: exception ");
         console_putdec(r->int_no);
