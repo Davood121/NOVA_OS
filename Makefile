@@ -13,9 +13,12 @@ KERNEL_MAX = 31744
 
 BOOT_SRCS  = src/boot/boot.S
 KRNL_SRCS  = src/kernel/entry.S \
+             src/kernel/isr.S \
              src/kernel/main.c \
              src/kernel/console.c \
              src/kernel/kbd.c \
+             src/kernel/idt.c \
+             src/kernel/rtc.c \
              src/kernel/mem.c \
              src/kernel/pit.c \
              src/kernel/cpu.c \
