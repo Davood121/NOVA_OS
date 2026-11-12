@@ -72,11 +72,29 @@ static struct fs_entry *fs_find_entry(const char *name) {
     return 0;
 }
 
+static int fs_read_sec(uint32_t lba, void *buf) {
+    void *cached = blk_read(lba);
+    if (!cached) return -1;
+    memcpy(buf, cached, 512);
+    return 0;
+}
+
+static int fs_write_sec(uint32_t lba, const void *buf) {
+    return blk_write(lba, buf);
+}
+
 static int fs_commit(void) {
     uint32_t t = table_lba(fs_sb.gen ? 0 : 1);
-    if (ata_write_sectors(t, FS_TABLE_SECTORS, &fs_tab) < 0) return -1;
+    const uint8_t *tab_ptr = (const uint8_t *)&fs_tab;
+    for (uint32_t i = 0; i < FS_TABLE_SECTORS; i++) {
+        if (fs_write_sec(t + i, tab_ptr + i * 512) < 0) return -1;
+    }
     fs_sb.gen = fs_sb.gen ? 0 : 1;
-    if (ata_write_sectors(FS_SB_LBA, 1, &fs_sb) < 0) return -1;
+    static uint8_t sbbuf[512];
+    memset(sbbuf, 0, 512);
+    memcpy(sbbuf, &fs_sb, sizeof fs_sb);
+    if (fs_write_sec(FS_SB_LBA, sbbuf) < 0) return -1;
+    blk_flush();
     return 0;
 }
 
@@ -88,9 +106,17 @@ static int fs_format(void) {
     fs_sb.log_next = FS_DATA_START;
     fs_sb.file_count = 0;
     memset(&fs_tab, 0, sizeof fs_tab);
-    if (ata_write_sectors(FS_TABLE_A_LBA, FS_TABLE_SECTORS, &fs_tab) < 0) return -1;
-    if (ata_write_sectors(FS_TABLE_B_LBA, FS_TABLE_SECTORS, &fs_tab) < 0) return -1;
-    if (ata_write_sectors(FS_SB_LBA, 1, &fs_sb) < 0) return -1;
+    static uint8_t zero_sec[512];
+    memset(zero_sec, 0, 512);
+    for (uint32_t i = 0; i < FS_TABLE_SECTORS; i++) {
+        if (fs_write_sec(FS_TABLE_A_LBA + i, zero_sec) < 0) return -1;
+        if (fs_write_sec(FS_TABLE_B_LBA + i, zero_sec) < 0) return -1;
+    }
+    static uint8_t sbbuf[512];
+    memset(sbbuf, 0, 512);
+    memcpy(sbbuf, &fs_sb, sizeof fs_sb);
+    if (fs_write_sec(FS_SB_LBA, sbbuf) < 0) return -1;
+    blk_flush();
     return 0;
 }
 
@@ -100,22 +126,26 @@ void fs_init(void) {
         console_puts("fs: no ata drive, filesystem disabled\n");
         return;
     }
-    struct fs_super sb;
-    if (ata_read_sectors(FS_SB_LBA, 1, &sb) < 0) {
+    static uint8_t sbbuf[512];
+    if (fs_read_sec(FS_SB_LBA, sbbuf) < 0) {
         console_puts("fs: superblock read failed\n");
         return;
     }
-    if (!magic_ok(sb.magic)) {
+    struct fs_super *sb = (struct fs_super *)sbbuf;
+    if (!magic_ok(sb->magic)) {
         if (fs_format() < 0) {
             console_puts("fs: format failed\n");
             return;
         }
         console_puts("fs: new disk - formatted transaction-log store\n");
     } else {
-        fs_sb = sb;
-        if (ata_read_sectors(table_lba(fs_sb.gen), FS_TABLE_SECTORS, &fs_tab) < 0) {
-            console_puts("fs: file table read failed\n");
-            return;
+        memcpy(&fs_sb, sb, sizeof fs_sb);
+        uint8_t *tab_ptr = (uint8_t *)&fs_tab;
+        for (uint32_t i = 0; i < FS_TABLE_SECTORS; i++) {
+            if (fs_read_sec(table_lba(fs_sb.gen) + i, tab_ptr + i * 512) < 0) {
+                console_puts("fs: file table read failed\n");
+                return;
+            }
         }
         console_puts("fs: mounted ");
         console_putdec(fs_sb.file_count);
@@ -159,7 +189,7 @@ int fs_write(const char *name, const void *data, uint32_t len) {
         uint32_t chunk = (len - off > 512) ? 512 : len - off;
         memset(secbuf, 0, 512);
         memcpy(secbuf, (const uint8_t *)data + off, chunk);
-        if (ata_write_sectors(fs_sb.log_next + s, 1, secbuf) < 0) return -1;
+        if (fs_write_sec(fs_sb.log_next + s, secbuf) < 0) return -1;
     }
     e->start = fs_sb.log_next;
     e->sectors = sectors;
@@ -176,7 +206,7 @@ int fs_read(const char *name, void *buf, uint32_t max) {
 
     static uint8_t secbuf[512];
     for (uint32_t off = 0; off < len; off += 512) {
-        if (ata_read_sectors(e->start + off / 512, 1, secbuf) < 0) return -1;
+        if (fs_read_sec(e->start + off / 512, secbuf) < 0) return -1;
         uint32_t chunk = (len - off > 512) ? 512 : len - off;
         memcpy((uint8_t *)buf + off, secbuf, chunk);
     }
