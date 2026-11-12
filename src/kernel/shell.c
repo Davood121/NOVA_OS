@@ -10,6 +10,27 @@ static void print_uptime(void) {
     console_puts("s\n");
 }
 
+static void print_date(void) {
+    uint8_t sec, min, hour, day, mon;
+    uint16_t year;
+    rtc_read(&sec, &min, &hour, &day, &mon, &year);
+    console_putdec(day);
+    console_puts("/");
+    console_putdec(mon);
+    console_puts("/");
+    console_putdec(year);
+    console_puts("  ");
+    if (hour < 10) console_putc('0');
+    console_putdec(hour);
+    console_putc(':');
+    if (min < 10) console_putc('0');
+    console_putdec(min);
+    console_putc(':');
+    if (sec < 10) console_putc('0');
+    console_putdec(sec);
+    console_putc('\n');
+}
+
 static void cmd_help(void) {
     console_puts(
         "commands:\n"
@@ -18,6 +39,7 @@ static void cmd_help(void) {
         "  echo     - print text\n"
         "  meminfo  - e820 memory map\n"
         "  uptime   - time since boot\n"
+        "  date     - real-time clock date and time\n"
         "  cpuinfo  - cpu vendor and model\n"
         "  reboot   - restart machine\n");
 }
@@ -40,7 +62,6 @@ static void exec(char *line) {
         args++;
         while (*args == ' ') args++;
     }
-    pit_poll();
 
     if (line[0] == 0) return;
     if (!strcmp(line, "help")) cmd_help();
@@ -48,6 +69,7 @@ static void exec(char *line) {
     else if (!strcmp(line, "echo")) cmd_echo(args);
     else if (!strcmp(line, "meminfo")) mem_print();
     else if (!strcmp(line, "uptime")) print_uptime();
+    else if (!strcmp(line, "date")) print_date();
     else if (!strcmp(line, "cpuinfo")) cpu_print_info();
     else if (!strcmp(line, "reboot")) cmd_reboot();
     else {
@@ -64,7 +86,6 @@ void shell_run(void) {
         console_puts("grid> ");
         len = 0;
         for (;;) {
-            pit_poll();
             char c = kbd_getchar();
             if (c == '\n') {
                 console_putc('\n');
