@@ -12,6 +12,10 @@ void pmm_init(void);
 /* Allocate a single 4KB physical frame. Returns physical address, or 0 on failure. */
 uint32_t pmm_alloc_frame(void);
 
+/* Allocate 'count' CONTIGUOUS 4KB physical frames. Returns physical address of the
+ * first frame, or 0 on failure. Required for multi-frame kernel allocations. */
+uint32_t pmm_alloc_frames(uint32_t count);
+
 /* Free a previously allocated 4KB physical frame */
 void pmm_free_frame(uint32_t paddr);
 
