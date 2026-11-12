@@ -1,10 +1,11 @@
 #include "kernel.h"
 #include "pmm.h"
 #include "heap.h"
+#include "paging.h"
 
 /*
  * Kernel Heap:
- * Starts at 1MB (0x100000) or higher, backed by pmm_alloc_frame().
+ * Starts at 1MB (0x100000) or higher, backed by pmm_alloc_frames().
  * We use an intrusive header free-list block allocator.
  */
 
@@ -25,31 +26,41 @@ static heap_block_t *heap_start = NULL;
 static size_t total_heap_size = 0;
 static size_t used_heap_size = 0;
 
+/* Identity-map freshly allocated heap frames once paging is active, so the
+ * heap keeps working when it grows beyond the 16MB identity-mapped region. */
+static void heap_map_range(uint32_t paddr, size_t len) {
+    if (!vmap_ready()) return;
+    for (uint32_t off = 0; off < len; off += PAGE_SIZE)
+        vmap(paddr + off, paddr + off, PAGE_WRITE);
+}
+
 static int expand_heap(size_t frames) {
-    for (size_t i = 0; i < frames; i++) {
-        uint32_t frame = pmm_alloc_frame();
-        if (!frame) return 0;
-        
-        heap_block_t *new_block = (heap_block_t *)frame;
-        new_block->magic = HEAP_MAGIC;
-        new_block->size = PAGE_SIZE - BLOCK_HEADER_SIZE;
-        new_block->is_free = 1;
-        new_block->next = NULL;
-        new_block->prev = NULL;
+    if (frames == 0) return 0;
 
-        total_heap_size += PAGE_SIZE;
+    /* One contiguous run of frames backing ONE block, so allocations larger
+     * than a single 4KB page are actually satisfiable. */
+    uint32_t base = pmm_alloc_frames((uint32_t)frames);
+    if (!base) return 0;
+    heap_map_range(base, frames * PAGE_SIZE);
 
-        if (!heap_start) {
-            heap_start = new_block;
-        } else {
-            /* Append to block list */
-            heap_block_t *curr = heap_start;
-            while (curr->next) {
-                curr = curr->next;
-            }
-            curr->next = new_block;
-            new_block->prev = curr;
+    heap_block_t *block = (heap_block_t *)base;
+    block->magic = HEAP_MAGIC;
+    block->size = (uint32_t)(frames * PAGE_SIZE - BLOCK_HEADER_SIZE);
+    block->is_free = 1;
+    block->next = NULL;
+    block->prev = NULL;
+
+    total_heap_size += frames * PAGE_SIZE;
+
+    if (!heap_start) {
+        heap_start = block;
+    } else {
+        heap_block_t *curr = heap_start;
+        while (curr->next) {
+            curr = curr->next;
         }
+        curr->next = block;
+        block->prev = curr;
     }
     return 1;
 }
@@ -67,36 +78,35 @@ void *kmalloc(size_t size) {
     /* Align size to 8 bytes */
     size = (size + 7) & ~7;
 
-    heap_block_t *curr = heap_start;
-    while (curr) {
-        if (curr->is_free && curr->size >= size) {
-            /* Split block if remainder is big enough */
-            if (curr->size >= size + BLOCK_HEADER_SIZE + 16) {
-                heap_block_t *split = (heap_block_t *)((uint8_t *)curr + BLOCK_HEADER_SIZE + size);
-                split->magic = HEAP_MAGIC;
-                split->size = curr->size - size - BLOCK_HEADER_SIZE;
-                split->is_free = 1;
-                split->next = curr->next;
-                split->prev = curr;
-                if (curr->next) curr->next->prev = split;
-                curr->next = split;
-                curr->size = size;
+    size_t frames_needed = (size + BLOCK_HEADER_SIZE + PAGE_SIZE - 1) / PAGE_SIZE;
+    if (frames_needed < 4) frames_needed = 4;
+
+    for (;;) {
+        heap_block_t *curr = heap_start;
+        while (curr) {
+            if (curr->is_free && curr->size >= size) {
+                /* Split block if remainder is big enough */
+                if (curr->size >= size + BLOCK_HEADER_SIZE + 16) {
+                    heap_block_t *split = (heap_block_t *)((uint8_t *)curr + BLOCK_HEADER_SIZE + size);
+                    split->magic = HEAP_MAGIC;
+                    split->size = curr->size - size - BLOCK_HEADER_SIZE;
+                    split->is_free = 1;
+                    split->next = curr->next;
+                    split->prev = curr;
+                    if (curr->next) curr->next->prev = split;
+                    curr->next = split;
+                    curr->size = (uint32_t)size;
+                }
+                curr->is_free = 0;
+                used_heap_size += curr->size + BLOCK_HEADER_SIZE;
+                return (void *)((uint8_t *)curr + BLOCK_HEADER_SIZE);
             }
-            curr->is_free = 0;
-            used_heap_size += curr->size + BLOCK_HEADER_SIZE;
-            return (void *)((uint8_t *)curr + BLOCK_HEADER_SIZE);
+            curr = curr->next;
         }
-        if (!curr->next) break;
-        curr = curr->next;
+
+        /* Out of heap: grow by one contiguous multi-frame block, then retry */
+        if (!expand_heap(frames_needed)) return NULL;
     }
-
-    /* Out of heap: allocate more frames from PMM */
-    size_t needed = size + BLOCK_HEADER_SIZE;
-    size_t frames = (needed + PAGE_SIZE - 1) / PAGE_SIZE;
-    if (frames < 4) frames = 4;
-    if (!expand_heap(frames)) return NULL;
-
-    return kmalloc(size);
 }
 
 void kfree(void *ptr) {
