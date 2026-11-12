@@ -38,6 +38,26 @@ void mem_init(void);
 void mem_print(void);
 uint64_t mem_usable_bytes(void);
 
+/* ---- memory management (v0.3) ---- */
+void pmm_init(void);
+uint32_t pmm_alloc_frame(void);
+void pmm_free_frame(uint32_t paddr);
+uint32_t pmm_total_frames(void);
+uint32_t pmm_used_frames(void);
+uint32_t pmm_free_frames_count(void);
+
+void heap_init(void);
+void *kmalloc(size_t size);
+void kfree(void *ptr);
+void *krealloc(void *ptr, size_t new_size);
+size_t heap_used_bytes(void);
+size_t heap_total_bytes(void);
+
+void paging_init(void);
+int vmap(uint32_t vaddr, uint32_t paddr, uint32_t flags);
+void vunmap(uint32_t vaddr);
+void page_fault_handler(void *regs);
+
 /* ---- pit / time ---- */
 void pit_init(void);
 void pit_irq(void);

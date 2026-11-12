@@ -15,6 +15,9 @@ void kmain(void) {
     console_puts("GRID OS 0.2 - the machine that computes\n\n");
 
     mem_init();
+    pmm_init();
+    heap_init();
+    paging_init();
     idt_init();
     irq_register(0, pit_irq);
     irq_register(1, kbd_irq);

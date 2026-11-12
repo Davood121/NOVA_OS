@@ -20,6 +20,9 @@ KRNL_SRCS  = src/kernel/entry.S \
              src/kernel/idt.c \
              src/kernel/rtc.c \
              src/kernel/mem.c \
+             src/kernel/pmm.c \
+             src/kernel/heap.c \
+             src/kernel/paging.c \
              src/kernel/pit.c \
              src/kernel/cpu.c \
              src/kernel/shell.c \
