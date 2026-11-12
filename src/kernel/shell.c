@@ -42,6 +42,7 @@ static void cmd_help(void) {
         "  hexdump  - display hex view of memory\n"
         "  sleep    - busy-wait sleep in seconds\n"
         "  rand     - pseudo-random 32-bit integer\n"
+        "  blkstat  - block cache hits/misses/dirty stats\n"
         "  atainfo  - detect ata drive\n"
         "  ataread  - hexdump one disk sector (lba in hex)\n"
         "  uptime   - time since boot\n"
@@ -130,6 +131,19 @@ static void cmd_rand(void) {
     console_puts(")\n");
 }
 
+static void cmd_blkstat(void) {
+    console_puts("Block Cache Stats (512B sectors):\n");
+    console_puts("  capacity: ");
+    console_putdec(blkcache_total_blocks());
+    console_puts(" blocks\n  hits:     ");
+    console_putdec(blkcache_hits());
+    console_puts("\n  misses:   ");
+    console_putdec(blkcache_misses());
+    console_puts("\n  dirty:    ");
+    console_putdec(blkcache_dirty_count());
+    console_puts(" blocks\n");
+}
+
 static void cmd_atainfo(void) {
     ata_print_info();
 }
@@ -193,6 +207,7 @@ static void exec(char *line) {
     else if (!strcmp(line, "hexdump")) cmd_hexdump(args);
     else if (!strcmp(line, "sleep")) cmd_sleep(args);
     else if (!strcmp(line, "rand")) cmd_rand();
+    else if (!strcmp(line, "blkstat")) cmd_blkstat();
     else if (!strcmp(line, "atainfo")) cmd_atainfo();
     else if (!strcmp(line, "ataread")) cmd_ataread(args);
     else if (!strcmp(line, "uptime")) print_uptime();
