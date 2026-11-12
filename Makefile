@@ -25,6 +25,7 @@ KRNL_SRCS  = src/kernel/entry.S \
              src/kernel/paging.c \
              src/kernel/ata.c \
              src/kernel/blkcache.c \
+             src/kernel/fs.c \
              src/kernel/pit.c \
              src/kernel/cpu.c \
              src/kernel/shell.c \
