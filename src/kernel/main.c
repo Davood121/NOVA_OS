@@ -12,7 +12,7 @@ void kmain(void) {
     console_set_color(0x0B);
     console_puts(banner);
     console_set_color(0x07);
-    console_puts("GRID OS 0.4 - the machine that computes\n\n");
+    console_puts("GRID OS 0.5 - the machine that computes\n\n");
 
     mem_init();
     pmm_init();
@@ -25,6 +25,7 @@ void kmain(void) {
     rtc_init();
     ata_init();
     blkcache_init();
+    fs_init();
     __asm__ volatile("sti");
 
     console_puts("boot ok. interrupts live. type 'help' for commands.\n\n");
