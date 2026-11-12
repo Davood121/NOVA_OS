@@ -13,6 +13,14 @@ static inline uint8_t inb(uint16_t port) {
     __asm__ volatile("inb %1, %0" : "=a"(v) : "Nd"(port));
     return v;
 }
+static inline void outw(uint16_t port, uint16_t val) {
+    __asm__ volatile("outw %0, %1" :: "a"(val), "Nd"(port));
+}
+static inline uint16_t inw(uint16_t port) {
+    uint16_t v;
+    __asm__ volatile("inw %1, %0" : "=a"(v) : "Nd"(port));
+    return v;
+}
 
 /* ---- console ---- */
 void console_clear(void);
@@ -25,8 +33,10 @@ void console_putdec(uint32_t v);
 
 /* ---- interrupts ---- */
 typedef void (*irq_handler_t)(void);
+typedef void (*exc_handler_t)(void *regs);
 void idt_init(void);
 void irq_register(uint8_t irq, irq_handler_t h);
+void exc_register(uint8_t exc, exc_handler_t h);
 void isr_dispatch(void *regs);
 
 /* ---- keyboard (IRQ-driven) ---- */
@@ -41,6 +51,7 @@ uint64_t mem_usable_bytes(void);
 /* ---- memory management (v0.3) ---- */
 void pmm_init(void);
 uint32_t pmm_alloc_frame(void);
+uint32_t pmm_alloc_frames(uint32_t count);
 void pmm_free_frame(uint32_t paddr);
 uint32_t pmm_total_frames(void);
 uint32_t pmm_used_frames(void);
@@ -55,8 +66,18 @@ size_t heap_total_bytes(void);
 
 void paging_init(void);
 int vmap(uint32_t vaddr, uint32_t paddr, uint32_t flags);
+int vmap_ready(void);
 void vunmap(uint32_t vaddr);
 void page_fault_handler(void *regs);
+
+/* ---- ata (pio) ---- */
+void ata_init(void);
+int ata_present(void);
+uint32_t ata_sector_count(void);
+const char *ata_model(void);
+int ata_read_sectors(uint32_t lba, uint8_t count, void *buf);
+int ata_write_sectors(uint32_t lba, uint8_t count, const void *buf);
+void ata_print_info(void);
 
 /* ---- pit / time ---- */
 void pit_init(void);
