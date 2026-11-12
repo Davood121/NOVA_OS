@@ -45,6 +45,12 @@ static void cmd_help(void) {
         "  blkstat  - block cache hits/misses/dirty stats\n"
         "  atainfo  - detect ata drive\n"
         "  ataread  - hexdump one disk sector (lba in hex)\n"
+        "  ls       - list files on the gridfs store\n"
+        "  write    - write text to a file: write <name> <text>\n"
+        "  cat      - print a file: cat <name>\n"
+        "  rm       - delete a file: rm <name>\n"
+        "  fsinfo   - filesystem stats\n"
+        "  mkfs     - reformat the disk (erases all files)\n"
         "  uptime   - time since boot\n"
         "  date     - real-time clock date and time\n"
         "  cpuinfo  - cpu vendor and model\n"
@@ -179,6 +185,83 @@ static void cmd_ataread(const char *args) {
     }
 }
 
+static void cmd_ls(void) {
+    fs_print_list();
+}
+
+static void cmd_write(char *args) {
+    char *text = args;
+    while (*text && *text != ' ') text++;
+    if (*text) {
+        *text = 0;
+        text++;
+        while (*text == ' ') text++;
+    }
+    if (!args[0] || !text[0]) {
+        console_puts("usage: write <name> <text>\n");
+        return;
+    }
+    uint32_t len = strlen(text);
+    if (fs_write(args, text, len) < 0) {
+        console_puts("write: failed (disk full or io error)\n");
+        return;
+    }
+    console_puts("wrote ");
+    console_putdec(len);
+    console_puts(" bytes to '");
+    console_puts(args);
+    console_puts("'\n");
+}
+
+static void cmd_cat(const char *args) {
+    if (!args[0]) {
+        console_puts("usage: cat <name>\n");
+        return;
+    }
+    if (!fs_exists(args)) {
+        console_puts("cat: no such file\n");
+        return;
+    }
+    static uint8_t buf[4096];
+    int n = fs_read(args, buf, sizeof buf);
+    if (n < 0) {
+        console_puts("cat: read failed\n");
+        return;
+    }
+    for (int i = 0; i < n; i++) console_putc((char)buf[i]);
+    console_putc('\n');
+}
+
+static void cmd_rm(const char *args) {
+    if (!args[0]) {
+        console_puts("usage: rm <name>\n");
+        return;
+    }
+    if (fs_delete(args) < 0) {
+        console_puts("rm: no such file\n");
+        return;
+    }
+    console_puts("deleted '");
+    console_puts(args);
+    console_puts("'\n");
+}
+
+static void cmd_fsinfo(void) {
+    fs_print_info();
+}
+
+static void cmd_mkfs(const char *args) {
+    if (strcmp(args, "yes") != 0) {
+        console_puts("mkfs: this erases all files. type 'mkfs yes' to confirm.\n");
+        return;
+    }
+    if (fs_format_force() < 0) {
+        console_puts("mkfs: format failed\n");
+        return;
+    }
+    console_puts("mkfs: disk formatted\n");
+}
+
 static void cmd_echo(const char *args) {
     console_puts(args);
     console_putc('\n');
@@ -210,6 +293,12 @@ static void exec(char *line) {
     else if (!strcmp(line, "blkstat")) cmd_blkstat();
     else if (!strcmp(line, "atainfo")) cmd_atainfo();
     else if (!strcmp(line, "ataread")) cmd_ataread(args);
+    else if (!strcmp(line, "ls")) cmd_ls();
+    else if (!strcmp(line, "write")) cmd_write(args);
+    else if (!strcmp(line, "cat")) cmd_cat(args);
+    else if (!strcmp(line, "rm")) cmd_rm(args);
+    else if (!strcmp(line, "fsinfo")) cmd_fsinfo();
+    else if (!strcmp(line, "mkfs")) cmd_mkfs(args);
     else if (!strcmp(line, "uptime")) print_uptime();
     else if (!strcmp(line, "date")) print_date();
     else if (!strcmp(line, "cpuinfo")) cpu_print_info();
