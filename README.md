@@ -4,7 +4,7 @@ A from-scratch operating system: custom bootloader, custom 32-bit kernel,
 custom shell. No Linux, no BSD — every byte of this OS is ours.
 See `BLUEPRINT.md` for the full long-term design (the reactive cell-graph OS).
 
-## Current status (v0.4 — storage milestone)
+## Current status (v0.5 — filesystem milestone)
 
 - Custom BIOS stage-1 bootloader (512 bytes): captures the e820 memory map,
   loads the kernel via BIOS int 13h (LBA with CHS fallback), enables the A20
@@ -18,13 +18,20 @@ See `BLUEPRINT.md` for the full long-term design (the reactive cell-graph OS).
   multi-frame runs via `pmm_alloc_frames`), kernel heap (`kmalloc`/`kfree`/
   `krealloc`, contiguous-backed growth), 2-level paging (identity-mapped
   first 16 MB, `vmap`/`vunmap`, page-fault reporting).
-- **ATA storage driver (new in v0.4):** polling PIO LBA28 driver for the
+- **ATA storage driver (v0.4):** polling PIO LBA28 driver for the
   primary master (ports 0x1F0/0x3F6), IDENTIFY with ATAPI skip, sector
   read/write with busy/DRQ waits and cache flush.
+- **Block cache (v0.5):** 512-byte sector cache over the ATA driver with
+  hits/misses/dirty tracking and write-back flush.
+- **GRIDFS transaction-log filesystem (new in v0.5):** superblock at LBA 0,
+  A/B file-table copies with generation bit for crash-consistent commits,
+  append-only data log. Auto-formats a blank disk at boot. 32 files max,
+  24-char names, files up to 4 KB readable via shell.
 - Interactive shell (`grid>`) with commands:
-  `help`, `clear`, `echo`, `meminfo`, `uptime`, `cpuinfo`, `reboot`,
-  `date`, `memstat`, `hexdump`, `sleep`, `rand`,
-  `atainfo`, `ataread <lba>`.
+  `help`, `clear`, `echo`, `meminfo`, `memstat`, `hexdump`, `sleep`, `rand`,
+  `blkstat`, `atainfo`, `ataread <lba>`, `ls`, `write <name> <text>`,
+  `cat <name>`, `rm <name>`, `fsinfo`, `mkfs yes`, `uptime`, `date`,
+  `cpuinfo`, `reboot`.
 
 ## Build
 
@@ -67,6 +74,9 @@ Notes:
 - **ATA disk access** requires the SATA controller in IDE/legacy/compatibility
   mode (most BIOSes default to this; QEMU's default `-hda` works too).
   Try `atainfo` at the prompt, then `ataread 0` to dump the first sector.
+- **Files persist on the USB stick**: `write note hello`, `cat note`,
+  `ls`, `fsinfo`. A blank disk is auto-formatted at boot; `mkfs yes`
+  reformats (erases everything).
 
 ## Repository layout
 
@@ -89,6 +99,8 @@ src/kernel/pmm.c       physical frame allocator (bitmap, contiguous runs)
 src/kernel/heap.c      kernel heap (kmalloc/kfree/krealloc)
 src/kernel/paging.c    2-level paging, vmap, page-fault handler
 src/kernel/ata.c       ATA PIO LBA28 disk driver
+src/kernel/blkcache.c  512-byte block cache (write-back)
+src/kernel/fs.c        gridfs transaction-log filesystem
 src/kernel/cpu.c       CPUID reporting
 src/kernel/shell.c     interactive shell
 src/kernel/util.c      freestanding libc bits
@@ -99,7 +111,7 @@ src/kernel/util.c      freestanding libc bits
 1. **v0.2** ✅ — interrupt-driven input (IDT, PIC, keyboard IRQ), RTC clock
 2. **v0.3** ✅ — physical memory allocator, kernel heap, paging
 3. **v0.4** ✅ — ATA storage driver (PIO LBA28); UEFI boot pending
-4. **v0.5** — filesystem (transaction log store per BLUEPRINT.md)
+4. **v0.5** ✅ — block cache + gridfs transaction-log filesystem
 5. **v0.6** — userland processes, capability security
 6. **v0.7** — graphics compositor, native USB HID
 7. **v1.0** — the GRID reactive cell-graph userland (Phase 0 semantics in-kernel)
