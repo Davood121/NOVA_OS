@@ -142,6 +142,7 @@ _start:
     lea rax, [rip+payload_start]
     mov esi, [rax]
     call ser_hex32
+    lea rax, [rip+payload_start]
     mov esi, [rax+4]
     call ser_hex32
     mov al, ' '
@@ -167,25 +168,30 @@ _start:
     mov al, 'V'
     call ser_byte
 
-    sub rsp, 0x40
-    mov qword ptr [rsp], 0
+    /* build the kernel GDT at 0x600: low conventional RAM, inside the
+       kernel's identity-mapped first 16 MB, so interrupt gates can still
+       fetch descriptors after paging_init turns paging on */
+    mov edi, 0x600
+    xor eax, eax
+    mov [rdi], rax
     mov rax, 0x00CF9A000000FFFF
-    mov [rsp+8], rax
+    mov [rdi+8], rax
     mov rax, 0x00CF92000000FFFF
-    mov [rsp+16], rax
-    mov word ptr [rsp+24], 23
-    mov rax, rsp
-    mov [rsp+26], rax
-    lgdt [rsp+24]
+    mov [rdi+16], rax
+    mov word ptr [rdi+24], 23
+    mov eax, 0x600
+    mov [rdi+26], rax
+    lgdt [rdi+24]
     mov al, 'G'
     call ser_byte
-    mov esi, [rsp+8]
+    mov esi, [0x608]
     call ser_hex32
-    mov esi, [rsp+12]
+    mov esi, [0x60C]
     call ser_hex32
     mov al, ' '
     call ser_byte
 
+    sub rsp, 0x20
     lea rax, [rip+.compat]
     push rax
     mov word ptr [rsp+4], 0x08
@@ -219,6 +225,14 @@ _start:
     mov rax, cr0
     and eax, 0x7FFFFFFF
     mov cr0, rax
+    mov rax, cr4
+    and eax, 0xFFDFDFDF
+    mov cr4, rax
+    mov ecx, 0xC0000080
+    rdmsr
+    and eax, 0xFFFFF6FF
+    xor edx, edx
+    wrmsr
     mov al, 'N'
     call ser_byte
 
