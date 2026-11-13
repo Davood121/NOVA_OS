@@ -29,5 +29,8 @@ void kmain(void) {
     __asm__ volatile("sti");
 
     console_puts("boot ok. interrupts live. type 'help' for commands.\n\n");
+#ifdef QEMU_EXIT
+    outb(0xF4, 0x10);
+#endif
     shell_run();
 }
