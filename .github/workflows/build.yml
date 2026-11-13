@@ -17,7 +17,9 @@ jobs:
           sudo apt-get install -y gcc-multilib
 
       - name: Build image
-        run: make
+        run: |
+          make
+          make uefi
 
       - name: Verify image structure
         run: |
@@ -25,9 +27,13 @@ jobs:
           sig=$(od -A n -t x1 -j 510 -N 2 grid-os.img | tr -d ' ')
           test "$sig" = "55aa" || { echo "bad MBR signature: $sig"; exit 1; }
           echo "image OK: 4 MB, MBR signature 55AA present"
+          test "$(stat -c%s build/BOOTX64.EFI)" -gt 20000
+          echo "UEFI loader OK: build/BOOTX64.EFI"
 
       - name: Upload bootable image
         uses: actions/upload-artifact@v4
         with:
           name: grid-os-img
-          path: grid-os.img
+          path: |
+            grid-os.img
+            build/BOOTX64.EFI
