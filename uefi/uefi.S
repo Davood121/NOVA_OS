@@ -135,6 +135,9 @@ ebs_loop:
     test eax, eax
     jnz ebs_fail
 
+    lea rax, [rip+s_ebs]
+    call print
+
     mov rax, [r14+0x60]
     mov rcx, r15
     mov rdx, [rip+mm_key]
@@ -149,8 +152,6 @@ ebs_loop:
     jmp ebs_fail
 
 ebs_ok:
-    lea rax, [rip+s_ebs]
-    call print
     mov rsi, [rip+img_base]
     mov eax, payload_start - IMG_BASE
     add rsi, rax
@@ -178,7 +179,6 @@ ebs_ok:
     mov rax, cr0
     and rax, 0x7FFFFFFF
     mov cr0, rax
-    jmp far [rip+fj_buf]
 
     mov ax, 0x10
     mov ds, ax
@@ -200,16 +200,24 @@ ebs_fail:
 
 /* ---- ConOut OutputString(rax = UTF-16 string) ---- */
 print:
+    push rbp
+    mov rbp, rsp
+    and rsp, -16
+    sub rsp, 0x20
     mov rcx, [r14+0x40]
     mov rdx, rax
     mov rax, [rcx+8]
-    sub rsp, 0x28
     call rax
-    add rsp, 0x28
+    mov rsp, rbp
+    pop rbp
     ret
 
 /* ---- GetMemoryMap with fresh size each attempt ---- */
 get_mm:
+    push rbp
+    mov rbp, rsp
+    and rsp, -16
+    sub rsp, 0x30
     mov rax, 8192
     mov [rip+mm_size], rax
     mov rax, [r14+0x60]
@@ -219,10 +227,10 @@ get_mm:
     lea r9, [rip+mm_dsize]
     lea r10, [rip+mm_dver]
     mov rax, [rax+0x38]
-    sub rsp, 0x28
     mov [rsp+0x20], r10
     call rax
-    add rsp, 0x28
+    mov rsp, rbp
+    pop rbp
     ret
 
 /* ---- force VGA text mode 3 via register writes ---- */
