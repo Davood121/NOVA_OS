@@ -16,6 +16,11 @@
  * writes (GOP left the text buffer unusable), then drops from long
  * mode to 32-bit protected mode with the exact GDT layout boot.S uses
  * (CS 0x08 / DS 0x10) and jumps to the kernel entry point.
+ *
+ * GAS intel_syntax gotcha this file works around: forward-referenced
+ * symbols used as VALUES assemble as memory loads, and [rip+sym] far
+ * jmps get mangled displacements. All value uses therefore go through
+ * backward-defined .set constants; the ljmp is hand-encoded.
  */
 
     .intel_syntax noprefix
@@ -25,6 +30,11 @@
     .set TEXT_RVA,   0x1000
     .set PL_RVA,     0x4000
     .set KERN_LOAD,  0x8000
+    .set SEQ_LEN,    6
+    .set CRTC_LEN,   25
+    .set GC_LEN,     9
+    .set ATC_LEN,    21
+    .set FJ_ADDR,    0x4F0
 
 /* ---------------- PE32+ headers ---------------- */
     .section .pehdr, "a"
@@ -156,8 +166,7 @@ ebs_ok:
     call make_e820
 
     mov rsi, [rip+img_base]
-    mov eax, payload_start - IMG_BASE
-    add rsi, rax
+    add rsi, PL_RVA
     mov edi, KERN_LOAD
     mov ecx, KERNEL_SIZE
     rep movsb
@@ -169,7 +178,8 @@ ebs_ok:
     call ser_byte
 
     mov rax, [rip+img_base]
-    mov edx, gdt - IMG_BASE
+    lea rdx, [rip+gdt]
+    sub rdx, IMG_BASE
     add rdx, rax
     mov [rip+gdt_desc+2], edx
     lgdt [rip+gdt_desc]
@@ -180,9 +190,10 @@ ebs_ok:
     lea rdx, [rip+.compat]
     sub rdx, IMG_BASE
     add rdx, rax
-    mov dword ptr [rip+fj_buf], edx
-    mov word ptr [rip+fj_buf+4], 0x08
-    jmp far [rip+fj_buf]
+    mov [FJ_ADDR], edx
+    mov word ptr [FJ_ADDR+4], 0x08
+    .byte 0xFF, 0x2C, 0x25
+    .long FJ_ADDR
 
 .compat:
     mov al, 'M'
@@ -342,7 +353,7 @@ vga_text_mode:
     out dx, al
 
     lea rsi, [rip+seq_tab]
-    mov ecx, seq_len
+    mov ecx, SEQ_LEN
     mov dx, 0x3C4
 1:
     mov al, [rsi]
@@ -365,7 +376,7 @@ vga_text_mode:
     dec dx
 
     lea rsi, [rip+crtc_tab]
-    mov ecx, crtc_len
+    mov ecx, CRTC_LEN
     xor ah, ah
 2:
     mov al, ah
@@ -380,7 +391,7 @@ vga_text_mode:
     jnz 2b
 
     lea rsi, [rip+gc_tab]
-    mov ecx, gc_len
+    mov ecx, GC_LEN
     mov dx, 0x3CE
 3:
     mov al, [rsi]
@@ -397,7 +408,7 @@ vga_text_mode:
     in al, dx
 
     lea rsi, [rip+atc_tab]
-    mov ecx, atc_len
+    mov ecx, ATC_LEN
     xor ah, ah
     mov dx, 0x3C0
 4:
@@ -422,10 +433,6 @@ gdt:
 gdt_desc:
     .word 23
     .long 0
-
-fj_buf:
-    .long 0
-    .word 0
 
 img_base:
     .quad 0
@@ -462,14 +469,12 @@ seq_tab:
     .byte 0x03, 0x00
     .byte 0x04, 0x02
     .byte 0x00, 0x03
-    .set seq_len, (. - seq_tab) / 2
 
 crtc_tab:
     .byte 0x5F, 0x4F, 0x50, 0x82, 0x55, 0x81, 0xBF, 0x1F
     .byte 0x00, 0x4F, 0x0D, 0x0E, 0x00, 0x00, 0x00, 0x50
     .byte 0x9C, 0x8E, 0x8F, 0x28, 0x1F, 0x96, 0xB9, 0xA3
     .byte 0xFF
-    .set crtc_len, . - crtc_tab
 
 gc_tab:
     .byte 0x00, 0x00
@@ -481,7 +486,6 @@ gc_tab:
     .byte 0x06, 0x0E
     .byte 0x07, 0x00
     .byte 0x08, 0xFF
-    .set gc_len, (. - gc_tab) / 2
 
 atc_tab:
     .byte 0x00, 0x01, 0x02, 0x03
@@ -493,7 +497,6 @@ atc_tab:
     .byte 0x0F
     .byte 0x00
     .byte 0x00
-    .set atc_len, . - atc_tab
 
 /* ---- embedded kernel ---- */
     .section .payload, "a"
