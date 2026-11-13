@@ -11,6 +11,10 @@ KRNL_LD = -m elf_i386 -T src/kernel/kernel.ld -N
 
 KERNEL_MAX = 31744
 
+ifdef QEMU_EXIT
+CFLAGS += -DQEMU_EXIT
+endif
+
 BOOT_SRCS  = src/boot/boot.S
 KRNL_SRCS  = src/kernel/entry.S \
              src/kernel/isr.S \
@@ -68,7 +72,26 @@ grid-os.img: build/boot.bin build/kernel.bin
 	dd if=build/boot.bin   of=$@ conv=notrunc
 	dd if=build/kernel.bin of=$@ seek=1 conv=notrunc bs=512
 
+build/uefi:
+	mkdir -p build/uefi
+
+build/uefi/sizes.inc: build/kernel.bin | build/uefi
+	printf '.set KERNEL_SIZE, %d\n' $$(stat -c%s build/kernel.bin) > $@
+	printf '.set PAYLOAD_RAW, %d\n' $$(( ($$(stat -c%s build/kernel.bin) + 511) & ~511 )) >> $@
+	printf '.set SIZEOF_IMAGE, %d\n' $$(( 0x3000 + ($$(stat -c%s build/kernel.bin) + 0xFFF) & ~0xFFF )) >> $@
+
+build/uefi.o: uefi/uefi.S build/uefi/sizes.inc | build
+	$(AS) --64 -o $@ $<
+
+build/uefi.bin: build/uefi.o
+	$(LD) -m elf_x86_64 -T uefi/uefi.ld --oformat binary -o $@ $<
+
+build/BOOTX64.EFI: build/uefi.bin
+	cp $< $@
+
+uefi: build/BOOTX64.EFI
+
 clean:
 	rm -rf build grid-os.img
 
-.PHONY: all clean
+.PHONY: all clean uefi
