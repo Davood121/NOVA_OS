@@ -129,14 +129,14 @@ _start:
     lea rax, [rip+s_image]
     call print
 
+    lea rax, [rip+s_ebs]
+    call print
+
     mov ebx, 3
 ebs_loop:
     call get_mm
     test eax, eax
     jnz ebs_fail
-
-    lea rax, [rip+s_ebs]
-    call print
 
     mov rax, [r14+0x60]
     mov rcx, r15
@@ -189,7 +189,29 @@ ebs_ok:
     jmp KERN_LOAD
 
 ebs_fail:
+    mov esi, eax
+    lea rdi, [rip+fail_buf]
+    mov ecx, 8
+1:
+    rol esi, 4
+    mov eax, esi
+    and eax, 0xF
+    cmp eax, 10
+    jb 2f
+    add eax, 'A'-10
+    jmp 3f
+2:
+    add eax, '0'
+3:
+    mov word [rdi], ax
+    add rdi, 2
+    dec ecx
+    jnz 1b
+    mov word ptr [rdi], 0x0A0D
+    mov word ptr [rdi+2], 0
     lea rax, [rip+s_fail]
+    call print
+    lea rax, [rip+fail_buf]
     call print
     mov dx, 0xF4
     mov al, 0x20
@@ -349,6 +371,9 @@ s_start: .word 'G','R','I','D',' ','U','E','F','I',' ','l','o','a','d','e','r',0
 s_image: .word 'h','p',0x0D,0x0A,0
 s_ebs:   .word 'e','b','s',0x0D,0x0A,0
 s_fail:  .word 'f','a','i','l',0x0D,0x0A,0
+
+fail_buf:
+    .space 24
 
 seq_tab:
     .byte 0x00, 0x01
