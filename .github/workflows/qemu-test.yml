@@ -59,13 +59,31 @@ jobs:
             -drive if=pflash,format=raw,file=/tmp/vars.fd \
             -drive format=raw,file=fat:rw:efi \
             -device isa-debug-exit,iobase=0xf4,iosize=0x01 \
+            -serial file:/tmp/serial.log \
+            -debugcon file:/tmp/ovmf.log -global isa-debugcon.iobase=0x402 \
             -display none -no-reboot -net none
           code=$?
           set -e
           echo "qemu exit code: $code"
           if [ $code -eq 33 ]; then
             echo "PASS: UEFI handoff to kernel works"
+          elif [ $code -eq 65 ]; then
+            echo "FAIL: loader ran but ExitBootServices failed"
+            tail -20 /tmp/ovmf.log || true
+            exit 1
           else
-            echo "FAIL: UEFI boot did not reach the kernel"
+            echo "FAIL: firmware never reached the loader (code $code)"
+            tail -30 /tmp/ovmf.log || true
+            tail -10 /tmp/serial.log || true
             exit 1
           fi
+
+      - name: Upload firmware logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uefi-debug-logs
+          path: |
+            /tmp/ovmf.log
+            /tmp/serial.log
+          if-no-files-found: ignore
