@@ -181,11 +181,41 @@ ebs_ok:
     call ser_byte
 
     mov rax, [rip+img_base]
+    mov esi, eax
+    call ser_hex32
+    mov al, ' '
+    call ser_byte
+
+    mov rax, [rip+img_base]
+    lea rdx, [rip+gdt]
+    sub rdx, IMG_BASE
+    add rdx, rax
+    mov esi, [rdx+8]
+    call ser_hex32
+    mov esi, [rdx+12]
+    call ser_hex32
+    mov al, ' '
+    call ser_byte
+
+    mov rax, [rip+img_base]
     lea rdx, [rip+.compat]
     sub rdx, IMG_BASE
     add rdx, rax
+    mov esi, edx
+    call ser_hex32
+    mov al, ' '
+    call ser_byte
+
     mov [FJ_ADDR], edx
     mov word ptr [FJ_ADDR+4], 0x08
+
+    mov esi, [FJ_ADDR]
+    call ser_hex32
+    mov esi, [FJ_ADDR+4]
+    call ser_hex32
+    mov al, 'J'
+    call ser_byte
+
     .byte 0xFF, 0x2C, 0x25
     .long FJ_ADDR
 
@@ -193,8 +223,10 @@ ebs_ok:
     mov al, 'M'
     call ser_byte
     mov rax, cr0
-    and rax, 0x7FFFFFFF
+    and eax, 0x7FFFFFFF
     mov cr0, rax
+    mov al, 'N'
+    call ser_byte
 
     mov ax, 0x10
     mov ds, ax
@@ -204,7 +236,8 @@ ebs_ok:
     mov gs, ax
     mov al, 'K'
     call ser_byte
-    jmp KERN_LOAD
+    mov eax, KERN_LOAD
+    jmp rax
 
 ebs_fail:
     mov esi, eax
@@ -338,6 +371,25 @@ ser_byte:
     mov al, ah
     mov dx, 0x3F8
     out dx, al
+    ret
+
+/* ---- 8 hex chars from esi to COM1 (64-bit callers only) ---- */
+ser_hex32:
+    mov ecx, 8
+1:
+    rol esi, 4
+    mov eax, esi
+    and eax, 0xF
+    cmp eax, 10
+    jb 2f
+    add eax, 'A'-10
+    jmp 3f
+2:
+    add eax, '0'
+3:
+    call ser_byte
+    dec ecx
+    jnz 1b
     ret
 
 /* ---- force VGA text mode 3 via register writes ---- */
