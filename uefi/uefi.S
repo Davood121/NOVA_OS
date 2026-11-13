@@ -133,29 +133,27 @@ _start:
     lea rax, [rip+s_image]
     call print
 
+    mov al, 'P'
+    call ser_byte
+    mov esi, esp
+    call ser_hex32
+    mov al, ' '
+    call ser_byte
+    lea rax, [rip+payload_start]
+    mov esi, [rax]
+    call ser_hex32
+    mov esi, [rax+4]
+    call ser_hex32
+    mov al, ' '
+    call ser_byte
+
     lea rax, [rip+s_ebs]
     call print
 
-    mov ebx, 3
-ebs_loop:
     call get_mm
     test eax, eax
     jnz ebs_fail
 
-    mov rax, [r14+0x60]
-    mov rcx, r15
-    mov rdx, [rip+mm_key]
-    mov rax, [rax+0xE8]
-    sub rsp, 0x28
-    call rax
-    add rsp, 0x28
-    test eax, eax
-    jz ebs_ok
-    dec ebx
-    jnz ebs_loop
-    jmp ebs_fail
-
-ebs_ok:
     call make_e820
 
     lea rsi, [rip+payload_start]
@@ -169,24 +167,21 @@ ebs_ok:
     mov al, 'V'
     call ser_byte
 
-    lea rdx, [rip+gdt]
-    mov [rip+gdt_desc+2], rdx
-    lgdt [rip+gdt_desc]
+    sub rsp, 0x40
+    mov qword ptr [rsp], 0
+    mov rax, 0x00CF9A000000FFFF
+    mov [rsp+8], rax
+    mov rax, 0x00CF92000000FFFF
+    mov [rsp+16], rax
+    mov word ptr [rsp+24], 23
+    mov rax, rsp
+    mov [rsp+26], rax
+    lgdt [rsp+24]
     mov al, 'G'
     call ser_byte
-
-    mov esi, [rdx+8]
+    mov esi, [rsp+8]
     call ser_hex32
-    mov esi, [rdx+12]
-    call ser_hex32
-    mov al, ' '
-    call ser_byte
-
-    mov rax, [rip+li_ptr]
-    mov esi, eax
-    call ser_hex32
-    mov rax, [rax+0x40]
-    mov esi, eax
+    mov esi, [rsp+12]
     call ser_hex32
     mov al, ' '
     call ser_byte
@@ -196,6 +191,26 @@ ebs_ok:
     mov word ptr [rsp+4], 0x08
     mov al, 'J'
     call ser_byte
+
+    mov rax, [r14+0x60]
+    mov rcx, r15
+    mov rdx, [rip+mm_key]
+    mov rax, [rax+0xE8]
+    call rax
+    test eax, eax
+    jnz ebs_fail
+
+    mov esi, [0x4FE]
+    call ser_hex32
+    mov esi, [0x500]
+    call ser_hex32
+    mov esi, [0x508]
+    call ser_hex32
+    mov esi, [0x510]
+    call ser_hex32
+    mov al, ' '
+    call ser_byte
+
     .byte 0xCB
 
 .compat:
@@ -451,14 +466,6 @@ vga_text_mode:
 
 /* ---- data ---- */
     .balign 8
-gdt:
-    .quad 0x0000000000000000
-    .quad 0x00CF9A000000FFFF
-    .quad 0x00CF92000000FFFF
-gdt_desc:
-    .word 23
-    .quad 0
-
 li_ptr:
     .quad 0
 
