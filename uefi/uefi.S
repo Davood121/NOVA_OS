@@ -10,11 +10,12 @@
  *
  * The loader: prints progress on the UEFI console, kills the watchdog,
  * locates its own image via the LoadedImage protocol, captures the
- * memory map, calls ExitBootServices, copies the kernel to 0x8000,
- * forces VGA text mode 3 by register writes (GOP left the text buffer
- * unusable), then drops from long mode to 32-bit protected mode with
- * the exact GDT layout boot.S uses (CS 0x08 / DS 0x10) and jumps to
- * the kernel entry point.
+ * memory map, calls ExitBootServices, converts that map into an e820
+ * table for the kernel (count u16 @0x4FE, 24-byte entries @0x500),
+ * copies the kernel to 0x8000, forces VGA text mode 3 by register
+ * writes (GOP left the text buffer unusable), then drops from long
+ * mode to 32-bit protected mode with the exact GDT layout boot.S uses
+ * (CS 0x08 / DS 0x10) and jumps to the kernel entry point.
  */
 
     .intel_syntax noprefix
@@ -152,20 +153,28 @@ ebs_loop:
     jmp ebs_fail
 
 ebs_ok:
+    call make_e820
+
     mov rsi, [rip+img_base]
     mov eax, payload_start - IMG_BASE
     add rsi, rax
     mov edi, KERN_LOAD
     mov ecx, KERNEL_SIZE
     rep movsb
+    mov al, 'C'
+    call ser_byte
 
     call vga_text_mode
+    mov al, 'V'
+    call ser_byte
 
     mov rax, [rip+img_base]
     mov edx, gdt - IMG_BASE
     add rdx, rax
     mov [rip+gdt_desc+2], edx
     lgdt [rip+gdt_desc]
+    mov al, 'G'
+    call ser_byte
 
     mov rax, [rip+img_base]
     lea rdx, [rip+.compat]
@@ -176,6 +185,8 @@ ebs_ok:
     jmp far [rip+fj_buf]
 
 .compat:
+    mov al, 'M'
+    call ser_byte
     mov rax, cr0
     and rax, 0x7FFFFFFF
     mov cr0, rax
@@ -186,6 +197,8 @@ ebs_ok:
     mov ss, ax
     mov fs, ax
     mov gs, ax
+    mov al, 'K'
+    call ser_byte
     jmp KERN_LOAD
 
 ebs_fail:
@@ -253,6 +266,73 @@ get_mm:
     call rax
     mov rsp, rbp
     pop rbp
+    ret
+
+/* ---- convert UEFI memory map (mm_buf) to e820: count u16 @0x4FE,
+ *      24-byte entries (base u64, len u64, type u32, pad u32) @0x500 ---- */
+make_e820:
+    mov word ptr [0x4FE], 0
+    lea rsi, [rip+mm_buf]
+    mov r13d, 24
+    mov edi, 0x500
+.next:
+    test r13d, r13d
+    jz .done
+    mov r10, [rip+mm_dsize]
+    test r10, r10
+    jz .done
+    mov r8d, [rsi]
+    mov rax, [rsi+8]
+    mov rcx, [rsi+24]
+    shl rcx, 12
+    jrcxz .skip
+    mov edx, 2
+    cmp r8d, 7
+    je .usable
+    cmp r8d, 3
+    je .usable
+    cmp r8d, 4
+    je .usable
+    cmp r8d, 1
+    je .usable
+    cmp r8d, 2
+    je .usable
+    cmp r8d, 9
+    jne .nvs
+    mov edx, 3
+    jmp .store
+.nvs:
+    cmp r8d, 10
+    jne .store
+    mov edx, 4
+    jmp .store
+.usable:
+    mov edx, 1
+.store:
+    mov [rdi], rax
+    mov [rdi+8], rcx
+    mov [rdi+16], edx
+    mov dword ptr [rdi+20], 0
+    add rdi, 24
+    inc word ptr [0x4FE]
+    dec r13d
+.skip:
+    add rsi, r10
+    jmp .next
+.done:
+    ret
+
+/* ---- raw COM1 byte in al (works before and after ExitBootServices) ---- */
+ser_byte:
+    mov ah, al
+    mov dx, 0x3FD
+1:
+    in al, dx
+    test al, 0x20
+    jz 1b
+    mov al, ah
+    mov dx, 0x3F8
+    out dx, al
     ret
 
 /* ---- force VGA text mode 3 via register writes ---- */
