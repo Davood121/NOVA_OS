@@ -8,13 +8,12 @@
  *   0x1000  .text    loader code + data (8 KB reserved)
  *   0x3000  .payload kernel.bin embedded via .incbin
  *
- * The loader: prints progress on the UEFI console, kills the watchdog,
- * locates its own image via the LoadedImage protocol, captures the
- * memory map, calls ExitBootServices, copies the kernel to 0x8000,
- * forces VGA text mode 3 by register writes (GOP left the text buffer
- * unusable), then drops from long mode to 32-bit protected mode with
- * the exact GDT layout boot.S uses (CS 0x08 / DS 0x10) and jumps to
- * the kernel entry point.
+ * The loader: prints progress on the UEFI console, locates its own image
+ * via the LoadedImage protocol, captures the memory map, calls
+ * ExitBootServices, copies the kernel to 0x8000, forces VGA text mode 3
+ * by register writes (GOP left the text buffer unusable), then drops
+ * from long mode to 32-bit protected mode with the exact GDT layout
+ * boot.S uses (CS 0x08 / DS 0x10) and jumps to the kernel entry point.
  */
 
     .intel_syntax noprefix
@@ -105,18 +104,12 @@ _start:
     lea rax, [rip+s_start]
     call print
 
-    mov rax, [r14+0x58]
-    mov rcx, 0
-    mov rdx, 0
-    mov r8, 0
-    mov r9, 0
-    mov rax, [rax+0x100]
-    sub rsp, 0x28
-    call rax
-    add rsp, 0x28
-
-    lea rax, [rip+s_wd]
-    call print
+    mov r11, 0x50
+    call dump_st
+    mov r11, 0x58
+    call dump_st
+    mov r11, 0x60
+    call dump_st
 
     mov rax, [r14+0x58]
     mov rcx, r15
@@ -200,6 +193,29 @@ ebs_fail:
 1:
     pause
     jmp 1b
+
+/* ---- dump qword [r14+r11] as UTF-16 hex + CRLF ---- */
+dump_st:
+    mov rax, [r14+r11]
+    lea rdi, [rip+hex_buf]
+    add rdi, 32
+    mov r10d, 16
+1:
+    sub rdi, 2
+    mov rdx, rax
+    and edx, 0xF
+    cmp edx, 10
+    jb 2f
+    add edx, 55
+    jmp 3f
+2:  add edx, 48
+3:  mov [rdi], dx
+    shr rax, 4
+    dec r10d
+    jnz 1b
+    lea rax, [rip+hex_buf]
+    call print
+    ret
 
 /* ---- ConOut OutputString(rax = UTF-16 string) ---- */
 print:
@@ -341,10 +357,12 @@ g_li_guid:
     .byte 0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B
 
 s_start: .word 'G','R','I','D',' ','U','E','F','I',' ','l','o','a','d','e','r',0x0D,0x0A,0
-s_wd:    .word 'w','d',0x0D,0x0A,0
 s_image: .word 'h','p',0x0D,0x0A,0
 s_ebs:   .word 'e','b','s',0x0D,0x0A,0
 s_fail:  .word 'f','a','i','l',0x0D,0x0A,0
+
+    .balign 8
+hex_buf: .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x0D,0x0A,0
 
 seq_tab:
     .byte 0x00, 0x01
