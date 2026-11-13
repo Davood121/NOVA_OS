@@ -109,21 +109,21 @@ _start:
     call rax
     add rsp, 0x28
 
-    mov rax, [r14+0x60]
+    mov rax, [r14+0x58]
     mov rcx, 0
     mov rdx, 0
     mov r8, 0
     mov r9, 0
-    mov rax, [rax+0xF0]
+    mov rax, [rax+0x100]
     sub rsp, 0x28
     call rax
     add rsp, 0x28
 
-    mov rax, [r14+0x60]
+    mov rax, [r14+0x58]
     mov rcx, r15
     lea rdx, [rip+g_li_guid]
     lea r8, [rip+img_base]
-    mov rax, [rax+0x88]
+    mov rax, [rax+0x98]
     sub rsp, 0x28
     call rax
     add rsp, 0x28
@@ -144,10 +144,10 @@ ebs_loop:
     test eax, eax
     jnz ebs_fail
 
-    mov rax, [r14+0x60]
+    mov rax, [r14+0x58]
     mov rcx, r15
     mov rdx, [rip+mm_key]
-    mov rax, [rax+0xD8]
+    mov rax, [rax+0xE8]
     sub rsp, 0x28
     call rax
     add rsp, 0x28
@@ -214,15 +214,15 @@ ebs_fail:
 get_mm:
     mov rax, 8192
     mov [rip+mm_size], rax
-    mov rax, [r14+0x60]
+    mov rax, [r14+0x58]
     lea rcx, [rip+mm_size]
     lea rdx, [rip+mm_buf]
     lea r8, [rip+mm_key]
     lea r9, [rip+mm_dsize]
     lea r10, [rip+mm_dver]
-    mov [rsp+0x20], r10
     mov rax, [rax+0x38]
     sub rsp, 0x28
+    mov [rsp+0x20], r10
     call rax
     add rsp, 0x28
     ret
