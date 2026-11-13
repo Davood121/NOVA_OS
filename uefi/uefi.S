@@ -10,17 +10,11 @@
  *
  * The loader: prints progress on the UEFI console, kills the watchdog,
  * locates its own image via the LoadedImage protocol, captures the
- * memory map, calls ExitBootServices, converts that map into an e820
- * table for the kernel (count u16 @0x4FE, 24-byte entries @0x500),
- * copies the kernel to 0x8000, forces VGA text mode 3 by register
- * writes (GOP left the text buffer unusable), then drops from long
- * mode to 32-bit protected mode with the exact GDT layout boot.S uses
- * (CS 0x08 / DS 0x10) and jumps to the kernel entry point.
- *
- * GAS intel_syntax gotcha this file works around: forward-referenced
- * symbols used as VALUES assemble as memory loads, and [rip+sym] far
- * jmps get mangled displacements. All value uses therefore go through
- * backward-defined .set constants; the ljmp is hand-encoded.
+ * memory map, calls ExitBootServices, copies the kernel to 0x8000,
+ * forces VGA text mode 3 by register writes (GOP left the text buffer
+ * unusable), then drops from long mode to 32-bit protected mode with
+ * the exact GDT layout boot.S uses (CS 0x08 / DS 0x10) and jumps to
+ * the kernel entry point.
  */
 
     .intel_syntax noprefix
@@ -181,7 +175,7 @@ ebs_ok:
     lea rdx, [rip+gdt]
     sub rdx, IMG_BASE
     add rdx, rax
-    mov [rip+gdt_desc+2], edx
+    mov [rip+gdt_desc+2], rdx
     lgdt [rip+gdt_desc]
     mov al, 'G'
     call ser_byte
@@ -432,7 +426,7 @@ gdt:
     .quad 0x00CF92000000FFFF
 gdt_desc:
     .word 23
-    .long 0
+    .quad 0
 
 img_base:
     .quad 0
