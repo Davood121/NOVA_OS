@@ -36,10 +36,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install toolchain, QEMU, OVMF
+      - name: Install toolchain, QEMU, OVMF, mtools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential gcc-multilib qemu-system-x86 ovmf
+          sudo apt-get install -y build-essential gcc-multilib qemu-system-x86 ovmf mtools dosfstools
 
       - name: Build UEFI loader
         run: make QEMU_EXIT=1 uefi
@@ -50,14 +50,18 @@ jobs:
           VARS=$(ls /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd 2>/dev/null | head -1)
           echo "OVMF code: $CODE / vars: $VARS"
           test -n "$CODE" && test -n "$VARS"
-          mkdir -p efi/EFI/BOOT
-          cp build/BOOTX64.EFI efi/EFI/BOOT/
+          dd if=/dev/zero of=/tmp/disk.img bs=1M count=64
+          mkfs.vfat -F 32 /tmp/disk.img
+          mmd -i /tmp/disk.img ::/EFI
+          mmd -i /tmp/disk.img ::/EFI/BOOT
+          mcopy -i /tmp/disk.img build/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
+          mdir -i /tmp/disk.img ::/EFI/BOOT
           cp "$VARS" /tmp/vars.fd
           set +e
           timeout 90 qemu-system-x86_64 \
             -drive if=pflash,format=raw,readonly=on,file=$CODE \
             -drive if=pflash,format=raw,file=/tmp/vars.fd \
-            -drive format=raw,file=fat:rw:efi \
+            -drive format=raw,file=/tmp/disk.img \
             -device isa-debug-exit,iobase=0xf4,iosize=0x01 \
             -serial file:/tmp/serial.log \
             -debugcon file:/tmp/ovmf.log -global isa-debugcon.iobase=0x402 \
