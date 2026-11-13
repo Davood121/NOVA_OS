@@ -13,7 +13,7 @@ SECTIONS
         *(.text)
     }
 
-    . = 0x103000;
+    . = 0x104000;
     .payload : {
         *(.payload)
     }
