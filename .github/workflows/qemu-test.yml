@@ -3,7 +3,7 @@ name: qemu-test
 on: [push, workflow_dispatch]
 
 jobs:
-  boot-test:
+  bios-boot:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,65 +13,55 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential gcc-multilib qemu-system-x86
 
-      - name: Build
-        run: make
+      - name: Build (QEMU exit hook enabled)
+        run: make QEMU_EXIT=1
 
-      - name: Boot smoke test (headless QEMU)
+      - name: BIOS boot test
         run: |
-          rm -f /tmp/qmp.sock /tmp/screen.ppm
-          qemu-system-i386 -fda grid-os.img -display none -no-reboot \
-            -qmp unix:/tmp/qmp.sock,server,nowait &
-          QPID=$!
-          sleep 5
-          if ! kill -0 $QPID 2>/dev/null; then
-            echo "FAIL: QEMU exited before 5s (triple fault or boot crash)"
+          set +e
+          timeout 60 qemu-system-i386 -fda grid-os.img -display none -no-reboot \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x01
+          code=$?
+          set -e
+          echo "qemu exit code: $code"
+          if [ $code -eq 33 ]; then
+            echo "PASS: kernel booted, init ran, reached shell"
+          else
+            echo "FAIL: kernel did not reach the boot-ok point"
             exit 1
           fi
-          python3 - <<'PYEOF'
-          import socket, json, time, sys
-          s = None
-          for _ in range(50):
-              try:
-                  s = socket.socket(socket.AF_UNIX)
-                  s.connect('/tmp/qmp.sock')
-                  break
-              except OSError:
-                  time.sleep(0.1)
-          if s is None:
-              sys.exit('FAIL: could not connect to QMP')
-          f = s.makefile('rwb')
-          f.readline()
-          def cmd(obj):
-              f.write((json.dumps(obj) + '\n').encode())
-              f.flush()
-              return f.readline()
-          cmd({"execute": "qmp_capabilities"})
-          r = cmd({"execute": "screendump", "arguments": {"filename": "/tmp/screen.ppm"}})
-          if b'"error"' in r:
-              sys.exit('FAIL: screendump error: ' + r.decode())
-          PYEOF
-          kill $QPID 2>/dev/null || true
-          wait $QPID 2>/dev/null || true
-          python3 - <<'PYEOF'
-          import sys
-          data = open('/tmp/screen.ppm', 'rb').read()
-          if not data.startswith(b'P6'):
-              sys.exit('FAIL: screendump is not a P6 ppm')
-          parts = data.split(b'\n', 3)
-          w, h = map(int, parts[1].split())
-          pixels = parts[3]
-          lit = sum(1 for i in range(0, len(pixels), 3)
-                    if pixels[i] > 100 or pixels[i+1] > 100 or pixels[i+2] > 100)
-          print(f'screen: {w}x{h}, lit pixels: {lit}')
-          if lit < 500:
-              sys.exit('FAIL: screen looks blank - GRID banner not drawn')
-          print('PASS: GRID OS booted and banner is visible on VGA')
-          PYEOF
 
-      - name: Upload screendump on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: qemu-screendump
-          path: /tmp/screen.ppm
-          if-no-files-found: ignore
+  uefi-boot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain, QEMU, OVMF
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc-multilib qemu-system-x86 ovmf
+
+      - name: Build UEFI loader
+        run: make QEMU_EXIT=1 uefi
+
+      - name: UEFI boot test (OVMF)
+        run: |
+          mkdir -p efi/EFI/BOOT
+          cp build/BOOTX64.EFI efi/EFI/BOOT/
+          cp /usr/share/OVMF/OVMF_VARS.fd /tmp/vars.fd
+          set +e
+          timeout 90 qemu-system-x86_64 \
+            -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+            -drive if=pflash,format=raw,file=/tmp/vars.fd \
+            -drive format=raw,file=fat:rw:efi \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x01 \
+            -display none -no-reboot -net none
+          code=$?
+          set -e
+          echo "qemu exit code: $code"
+          if [ $code -eq 33 ]; then
+            echo "PASS: UEFI handoff to kernel works"
+          else
+            echo "FAIL: UEFI boot did not reach the kernel"
+            exit 1
+          fi
