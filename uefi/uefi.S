@@ -100,14 +100,10 @@ _start:
     mov r15, rcx
     mov r14, rdx
     and rsp, -16
+    sub rsp, 8
 
     lea rax, [rip+s_start]
-    mov rcx, [r14+0x40]
-    mov rdx, rax
-    mov rax, [rcx+8]
-    sub rsp, 0x28
-    call rax
-    add rsp, 0x28
+    call print
 
     mov rax, [r14+0x58]
     mov rcx, 0
@@ -118,6 +114,9 @@ _start:
     sub rsp, 0x28
     call rax
     add rsp, 0x28
+
+    lea rax, [rip+s_wd]
+    call print
 
     mov rax, [r14+0x58]
     mov rcx, r15
@@ -131,12 +130,7 @@ _start:
     jnz ebs_fail
 
     lea rax, [rip+s_image]
-    mov rcx, [r14+0x40]
-    mov rdx, rax
-    mov rax, [rcx+8]
-    sub rsp, 0x28
-    call rax
-    add rsp, 0x28
+    call print
 
     mov ebx, 3
 ebs_loop:
@@ -158,6 +152,8 @@ ebs_loop:
     jmp ebs_fail
 
 ebs_ok:
+    lea rax, [rip+s_ebs]
+    call print
     mov rsi, [rip+img_base]
     mov eax, payload_start - IMG_BASE
     add rsi, rax
@@ -197,18 +193,23 @@ ebs_ok:
 
 ebs_fail:
     lea rax, [rip+s_fail]
-    mov rcx, [r14+0x40]
-    mov rdx, rax
-    mov rax, [rcx+8]
-    sub rsp, 0x28
-    call rax
-    add rsp, 0x28
+    call print
     mov dx, 0xF4
     mov al, 0x20
     out dx, al
 1:
     pause
     jmp 1b
+
+/* ---- ConOut OutputString(rax = UTF-16 string) ---- */
+print:
+    mov rcx, [r14+0x40]
+    mov rdx, rax
+    mov rax, [rcx+8]
+    sub rsp, 0x28
+    call rax
+    add rsp, 0x28
+    ret
 
 /* ---- GetMemoryMap with fresh size each attempt ---- */
 get_mm:
@@ -340,7 +341,9 @@ g_li_guid:
     .byte 0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B
 
 s_start: .word 'G','R','I','D',' ','U','E','F','I',' ','l','o','a','d','e','r',0x0D,0x0A,0
-s_image: .word 'h','a','n','d','o','f','f',0x0D,0x0A,0
+s_wd:    .word 'w','d',0x0D,0x0A,0
+s_image: .word 'h','p',0x0D,0x0A,0
+s_ebs:   .word 'e','b','s',0x0D,0x0A,0
 s_fail:  .word 'f','a','i','l',0x0D,0x0A,0
 
 seq_tab:
