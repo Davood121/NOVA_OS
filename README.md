@@ -1,4 +1,4 @@
-# GRID OS
+# NOVA OS
 
 A from-scratch operating system: custom bootloader, custom 32-bit kernel,
 custom shell. No Linux, no BSD — every byte of this OS is ours.
