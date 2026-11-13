@@ -5,16 +5,17 @@
  * image is linked as a flat binary. Layout (file offset == RVA):
  *
  *   0x0000  PE headers            (SizeOfHeaders = 0x200)
- *   0x1000  .text    loader code + data (8 KB reserved)
- *   0x3000  .payload kernel.bin embedded via .incbin
+ *   0x1000  .text    loader code + data (12 KB reserved)
+ *   0x4000  .payload kernel.bin embedded via .incbin
  *
  * The loader: prints progress on the UEFI console, kills the watchdog,
  * locates its own image via the LoadedImage protocol, captures the
- * memory map, calls ExitBootServices, copies the kernel to 0x8000,
- * forces VGA text mode 3 by register writes (GOP left the text buffer
- * unusable), then drops from long mode to 32-bit protected mode with
- * the exact GDT layout boot.S uses (CS 0x08 / DS 0x10) and jumps to
- * the kernel entry point.
+ * memory map (with retry on EFI_BUFFER_TOO_SMALL), calls
+ * ExitBootServices (with retry, re-reading the map each attempt),
+ * copies the kernel to 0x8000, forces VGA text mode 3 by register
+ * writes (GOP left the text buffer unusable), then drops from long
+ * mode to 32-bit protected mode with the exact GDT layout boot.S uses
+ * (CS 0x08 / DS 0x10) and jumps to the kernel entry point.
  */
 
     .intel_syntax noprefix
@@ -22,7 +23,7 @@
 
     .set IMG_BASE,   0x100000
     .set TEXT_RVA,   0x1000
-    .set PL_RVA,     0x3000
+    .set PL_RVA,     0x4000
     .set KERN_LOAD,  0x8000
 
 /* ---------------- PE32+ headers ---------------- */
@@ -44,7 +45,7 @@ coff:
 opt:
     .word 0x20B
     .byte 1, 0
-    .long 0x2000
+    .long 0x3000
     .long PAYLOAD_RAW
     .long 0
     .long TEXT_RVA
@@ -73,9 +74,9 @@ opt:
 sec_text:
     .ascii ".text"
     .byte 0, 0, 0
-    .long 0x2000
+    .long 0x3000
     .long TEXT_RVA
-    .long 0x2000
+    .long 0x3000
     .long TEXT_RVA
     .long 0, 0, 0, 0, 0
     .long 0x60000020
@@ -137,19 +138,11 @@ _start:
     call rax
     add rsp, 0x28
 
-ebs_try:
-    mov rax, [r14+0x60]
-    lea rcx, [rip+mm_size]
-    lea rdx, [rip+mm_buf]
-    lea r8, [rip+mm_key]
-    lea r9, [rip+mm_dsize]
-    lea rax, [rip+mm_dver]
-    mov [rsp+0x20], rax
-    mov rax, [r14+0x60]
-    mov rax, [rax+0x38]
-    sub rsp, 0x28
-    call rax
-    add rsp, 0x28
+    mov ebx, 3
+ebs_loop:
+    call get_mm
+    test eax, eax
+    jnz ebs_fail
 
     mov rax, [r14+0x60]
     mov rcx, r15
@@ -159,8 +152,12 @@ ebs_try:
     call rax
     add rsp, 0x28
     test eax, eax
-    jnz ebs_fail
+    jz ebs_ok
+    dec ebx
+    jnz ebs_loop
+    jmp ebs_fail
 
+ebs_ok:
     mov rsi, [rip+img_base]
     mov eax, payload_start - IMG_BASE
     add rsi, rax
@@ -206,9 +203,29 @@ ebs_fail:
     sub rsp, 0x28
     call rax
     add rsp, 0x28
+    mov dx, 0xF4
+    mov al, 0x20
+    out dx, al
 1:
     pause
     jmp 1b
+
+/* ---- GetMemoryMap with fresh size each attempt ---- */
+get_mm:
+    mov rax, 8192
+    mov [rip+mm_size], rax
+    mov rax, [r14+0x60]
+    lea rcx, [rip+mm_size]
+    lea rdx, [rip+mm_buf]
+    lea r8, [rip+mm_key]
+    lea r9, [rip+mm_dsize]
+    lea r10, [rip+mm_dver]
+    mov [rsp+0x20], r10
+    mov rax, [rax+0x38]
+    sub rsp, 0x28
+    call rax
+    add rsp, 0x28
+    ret
 
 /* ---- force VGA text mode 3 via register writes ---- */
 vga_text_mode:
@@ -306,7 +323,7 @@ img_base:
     .quad 0
 
 mm_size:
-    .quad 4096
+    .quad 8192
 mm_key:
     .quad 0
 mm_dsize:
@@ -316,7 +333,7 @@ mm_dver:
 
     .balign 8
 mm_buf:
-    .space 4096
+    .space 8192
 
 g_li_guid:
     .byte 0xA1, 0x31, 0x1B, 0x5B, 0x62, 0x95, 0xD2, 0x11
