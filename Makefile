@@ -78,7 +78,7 @@ build/uefi:
 build/uefi/sizes.inc: build/kernel.bin | build/uefi
 	printf '.set KERNEL_SIZE, %d\n' $$(stat -c%s build/kernel.bin) > $@
 	printf '.set PAYLOAD_RAW, %d\n' $$(( ($$(stat -c%s build/kernel.bin) + 511) & ~511 )) >> $@
-	printf '.set SIZEOF_IMAGE, %d\n' $$(( 0x3000 + ($$(stat -c%s build/kernel.bin) + 0xFFF) & ~0xFFF )) >> $@
+	printf '.set SIZEOF_IMAGE, %d\n' $$(( 0x4000 + ($$(stat -c%s build/kernel.bin) + 0xFFF) & ~0xFFF )) >> $@
 
 build/uefi.o: uefi/uefi.S build/uefi/sizes.inc | build
 	$(AS) --64 -o $@ $<
