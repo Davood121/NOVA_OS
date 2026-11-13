@@ -17,4 +17,6 @@ SECTIONS
     .payload : {
         *(.payload)
     }
+    . = ALIGN(0x200);
+    .pad : { BYTE(0) }
 }
