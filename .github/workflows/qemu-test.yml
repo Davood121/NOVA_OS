@@ -51,7 +51,7 @@ jobs:
           echo "OVMF code: $CODE / vars: $VARS"
           test -n "$CODE" && test -n "$VARS"
           dd if=/dev/zero of=/tmp/disk.img bs=1M count=64
-          printf 'label: gpt\nstart=2048, size=129024, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B\n' | sfdisk /tmp/disk.img
+          printf 'label: gpt\nstart=2048, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B\n' | sfdisk /tmp/disk.img
           mkfs.vfat -F 32 --offset 2048 /tmp/disk.img
           mmd -i /tmp/disk.img@@1048576 ::/EFI
           mmd -i /tmp/disk.img@@1048576 ::/EFI/BOOT
