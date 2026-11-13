@@ -28,7 +28,6 @@
     .set CRTC_LEN,   25
     .set GC_LEN,     9
     .set ATC_LEN,    21
-    .set FJ_ADDR,    0x4F0
 
 /* ---------------- PE32+ headers ---------------- */
     .section .pehdr, "a"
@@ -123,7 +122,7 @@ _start:
     mov rax, [r14+0x60]
     mov rcx, r15
     lea rdx, [rip+g_li_guid]
-    lea r8, [rip+img_base]
+    lea r8, [rip+li_ptr]
     mov rax, [rax+0x98]
     sub rsp, 0x28
     call rax
@@ -159,8 +158,7 @@ ebs_loop:
 ebs_ok:
     call make_e820
 
-    mov rsi, [rip+img_base]
-    add rsi, PL_RVA
+    lea rsi, [rip+payload_start]
     mov edi, KERN_LOAD
     mov ecx, KERNEL_SIZE
     rep movsb
@@ -171,25 +169,12 @@ ebs_ok:
     mov al, 'V'
     call ser_byte
 
-    mov rax, [rip+img_base]
     lea rdx, [rip+gdt]
-    sub rdx, IMG_BASE
-    add rdx, rax
     mov [rip+gdt_desc+2], rdx
     lgdt [rip+gdt_desc]
     mov al, 'G'
     call ser_byte
 
-    mov rax, [rip+img_base]
-    mov esi, eax
-    call ser_hex32
-    mov al, ' '
-    call ser_byte
-
-    mov rax, [rip+img_base]
-    lea rdx, [rip+gdt]
-    sub rdx, IMG_BASE
-    add rdx, rax
     mov esi, [rdx+8]
     call ser_hex32
     mov esi, [rdx+12]
@@ -197,27 +182,21 @@ ebs_ok:
     mov al, ' '
     call ser_byte
 
-    mov rax, [rip+img_base]
-    lea rdx, [rip+.compat]
-    sub rdx, IMG_BASE
-    add rdx, rax
-    mov esi, edx
+    mov rax, [rip+li_ptr]
+    mov esi, eax
+    call ser_hex32
+    mov rax, [rax+0x40]
+    mov esi, eax
     call ser_hex32
     mov al, ' '
     call ser_byte
 
-    mov [FJ_ADDR], edx
-    mov word ptr [FJ_ADDR+4], 0x08
-
-    mov esi, [FJ_ADDR]
-    call ser_hex32
-    mov esi, [FJ_ADDR+4]
-    call ser_hex32
+    lea rax, [rip+.compat]
+    push rax
+    mov word ptr [rsp+4], 0x08
     mov al, 'J'
     call ser_byte
-
-    .byte 0xFF, 0x2C, 0x25
-    .long FJ_ADDR
+    .byte 0xCB
 
 .compat:
     mov al, 'M'
@@ -480,7 +459,7 @@ gdt_desc:
     .word 23
     .quad 0
 
-img_base:
+li_ptr:
     .quad 0
 
 mm_size:
