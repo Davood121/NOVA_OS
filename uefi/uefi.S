@@ -5,17 +5,16 @@
  * image is linked as a flat binary. Layout (file offset == RVA):
  *
  *   0x0000  PE headers            (SizeOfHeaders = 0x200)
- *   0x1000  .text    loader code + data (12 KB reserved)
- *   0x4000  .payload kernel.bin embedded via .incbin
+ *   0x1000  .text    loader code + data (8 KB reserved)
+ *   0x3000  .payload kernel.bin embedded via .incbin
  *
  * The loader: prints progress on the UEFI console, kills the watchdog,
  * locates its own image via the LoadedImage protocol, captures the
- * memory map (with retry on EFI_BUFFER_TOO_SMALL), calls
- * ExitBootServices (with retry, re-reading the map each attempt),
- * copies the kernel to 0x8000, forces VGA text mode 3 by register
- * writes (GOP left the text buffer unusable), then drops from long
- * mode to 32-bit protected mode with the exact GDT layout boot.S uses
- * (CS 0x08 / DS 0x10) and jumps to the kernel entry point.
+ * memory map, calls ExitBootServices, copies the kernel to 0x8000,
+ * forces VGA text mode 3 by register writes (GOP left the text buffer
+ * unusable), then drops from long mode to 32-bit protected mode with
+ * the exact GDT layout boot.S uses (CS 0x08 / DS 0x10) and jumps to
+ * the kernel entry point.
  */
 
     .intel_syntax noprefix
@@ -78,16 +77,17 @@ sec_text:
     .long TEXT_RVA
     .long 0x3000
     .long TEXT_RVA
-    .long 0, 0, 0, 0, 0
+    .long 0, 0
+    .word 0, 0
     .long 0x60000020
 sec_payload:
     .ascii ".payload"
-    .byte 0, 0, 0
     .long KERNEL_SIZE
     .long PL_RVA
     .long PAYLOAD_RAW
     .long PL_RVA
-    .long 0, 0, 0, 0, 0
+    .long 0, 0
+    .word 0, 0
     .long 0x40000040
 
 /* ---------------- loader code ---------------- */
