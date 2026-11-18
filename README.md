@@ -4,7 +4,7 @@ A from-scratch operating system: custom bootloader, custom 32-bit kernel,
 custom shell. No Linux, no BSD — every byte of this OS is ours.
 See `BLUEPRINT.md` for the full long-term design (the reactive cell-graph OS).
 
-## Current status (v0.6 — UEFI boot milestone)
+## Current status (v0.7 — graphics milestone)
 
 - Custom BIOS stage-1 bootloader (512 bytes): captures the e820 memory map,
   loads the kernel via BIOS int 13h (LBA with CHS fallback), enables the A20
@@ -27,18 +27,28 @@ See `BLUEPRINT.md` for the full long-term design (the reactive cell-graph OS).
   A/B file-table copies with generation bit for crash-consistent commits,
   append-only data log. Auto-formats a blank disk at boot. 32 files max,
   24-char names, files up to 4 KB readable via shell.
-- **UEFI boot (new in v0.6):** hand-rolled PE32+ EFI loader (`uefi/`), no
+- **UEFI boot (v0.6):** hand-rolled PE32+ EFI loader (`uefi/`), no
   gnu-efi, no EDK2 — the PE headers are written by hand in assembly. The
   loader kills the watchdog, captures the UEFI memory map and converts it
   to e820 for the kernel, copies the kernel to 0x8000, forces VGA text
   mode, scrubs the firmware CPU state (paging, PAE, EFER long-mode bits),
   rebuilds the kernel's GDT and drops to 32-bit protected mode. Both boot
   paths (legacy BIOS and UEFI) are boot-tested on every push in CI.
+- **VGA graphics (new in v0.7):** mode 13h graphics driver (`gfx.c`) — 320x200
+  in 256 colors via direct VGA register programming (no BIOS calls, safe from
+  protected mode), with `gfx_putpixel` / `gfx_fill_rect` and a clean restore
+  to text mode. The shell gets a `demo` command: it flips to graphics mode,
+  draws a live test picture (16-color palette bar, full XOR gradient, accent
+  rectangle), waits for a key, and restores text mode. A dedicated CI job
+  boots the OS in QEMU, keys in `demo` over QMP, screendumps the result and
+  verifies **all 51200 visible pixels** pixel-for-pixel against the expected
+  picture (QEMU's mode-13h double-dotted surface model + the vgabios default
+  DAC palette), then verifies the clean return to 80x25 text mode.
 - Interactive shell (`grid>`) with commands:
   `help`, `clear`, `echo`, `meminfo`, `memstat`, `hexdump`, `sleep`, `rand`,
   `blkstat`, `atainfo`, `ataread <lba>`, `ls`, `write <name> <text>`,
   `cat <name>`, `rm <name>`, `fsinfo`, `mkfs yes`, `uptime`, `date`,
-  `cpuinfo`, `reboot`.
+  `cpuinfo`, `demo`, `reboot`.
 
 ## Build
 
@@ -80,6 +90,7 @@ Or use [balenaEtcher](https://etcher.balena.io/) / Rufus (select the .img file).
 3. Boot from the USB stick — **either legacy/BIOS/CSM mode or UEFI mode
    both work now**.
 4. You should see the GRID banner and the `grid>` prompt.
+5. Type `demo` at the prompt to see the first graphics output.
 
 Notes:
 - **UEFI boot:** use the `BOOTX64.EFI` from the CI artifact instead of
@@ -115,6 +126,7 @@ src/kernel/entry.S     kernel entry point (stack + bss setup)
 src/kernel/kernel.ld   kernel linker script (linked at 0x8000)
 src/kernel/main.c      kernel entry (kmain)
 src/kernel/console.c   VGA text console
+src/kernel/gfx.c       VGA mode-13h graphics (320x200x256, text restore)
 src/kernel/kbd.c       PS/2 keyboard driver (IRQ ring buffer)
 src/kernel/idt.c       IDT, ISR dispatch, exception registry
 src/kernel/isr.S       interrupt stubs (0-47)
@@ -141,5 +153,8 @@ uefi/uefi.ld           UEFI loader linker script
 3. **v0.4** ✅ — ATA storage driver (PIO LBA28)
 4. **v0.5** ✅ — block cache + gridfs transaction-log filesystem
 5. **v0.6** ✅ — UEFI boot (hand-rolled PE32+ loader, CI-tested on OVMF)
-6. **v0.7** — userland processes, capability security, graphics compositor
-7. **v1.0** — the GRID reactive cell-graph userland (Phase 0 semantics in-kernel)
+6. **v0.7** ✅ — VGA graphics: mode 13h driver + `demo` shell command,
+   pixel-for-pixel verified in CI (51200/51200 visible pixels)
+7. **v0.8** — text/font rendering in graphics mode, userland processes,
+   capability security, graphics compositor
+8. **v1.0** — the GRID reactive cell-graph userland (Phase 0 semantics in-kernel)
