@@ -54,6 +54,7 @@ static void cmd_help(void) {
         "  uptime   - time since boot\n"
         "  date     - real-time clock date and time\n"
         "  cpuinfo  - cpu vendor and model\n"
+        "  demo     - 320x200x256 graphics demo (any key returns)\n"
         "  reboot   - restart machine\n");
 }
 
@@ -262,6 +263,16 @@ static void cmd_mkfs(const char *args) {
     console_puts("mkfs: disk formatted\n");
 }
 
+static void cmd_demo(void) {
+    console_puts("switching to 320x200x256 - press any key to return\n");
+    gfx_mode13();
+    gfx_demo_draw();
+    kbd_getchar();
+    gfx_text_restore();
+    console_clear();
+    console_puts("back in text mode\n");
+}
+
 static void cmd_echo(const char *args) {
     console_puts(args);
     console_putc('\n');
@@ -302,6 +313,7 @@ static void exec(char *line) {
     else if (!strcmp(line, "uptime")) print_uptime();
     else if (!strcmp(line, "date")) print_date();
     else if (!strcmp(line, "cpuinfo")) cpu_print_info();
+    else if (!strcmp(line, "demo")) cmd_demo();
     else if (!strcmp(line, "reboot")) cmd_reboot();
     else {
         console_puts("unknown command: ");
