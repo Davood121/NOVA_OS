@@ -3,7 +3,7 @@ AS      = as
 LD      = ld
 OBJCOPY = objcopy
 
-CFLAGS  = -m32 -ffreestanding -fno-pic -fno-pie -fno-stack-protector \
+CFLAGS  = -m32 -ffreestanding -fno-pic -fno-pie -fno-stack-protector \\
           -fno-asynchronous-unwind-tables -nostdlib -O2 -Wall -Wextra
 ASFLAGS = --32
 BOOTLD  = -m elf_i386 -T src/boot/boot.ld --oformat binary
@@ -16,9 +16,9 @@ CFLAGS += -DQEMU_EXIT
 endif
 
 BOOT_SRCS  = src/boot/boot.S
-KRNL_SRCS  = src/kernel/entry.S \
-             src/kernel/isr.S \
-             src/kernel/main.c \
+KRNL_SRCS  = src/kernel/entry.S \\
+             src/kernel/isr.S \\
+             src/kernel/main.c \\
              src/kernel/console.c \
              src/kernel/kbd.c \
              src/kernel/idt.c \
@@ -32,6 +32,7 @@ KRNL_SRCS  = src/kernel/entry.S \
              src/kernel/fs.c \
              src/kernel/pit.c \
              src/kernel/cpu.c \
+             src/kernel/gfx.c \
              src/kernel/shell.c \
              src/kernel/util.c
 
