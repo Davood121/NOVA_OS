@@ -10,6 +10,7 @@
  */
 
 #include "kernel.h"
+#include "font.h"
 
 #define GFX_W   320
 #define GFX_H   200
@@ -155,4 +156,46 @@ void gfx_demo_draw(void) {
         for (x = 0; x < GFX_W; x++)
             FB[y * GFX_W + x] = (uint8_t)((x ^ y) & 0xFF);
     gfx_fill_rect(10, 12, 40, 12, 0x0C);
+}
+
+/* ---- v0.8: bitmap-font text rendering ---- */
+
+/* draw one 8x8 glyph with its top-left at FB(x,y). Bit 0 of each row byte
+   is the leftmost pixel. Each font pixel becomes a scale x scale block.
+   Only foreground pixels are written, i.e. the background stays intact. */
+void gfx_draw_char(int x, int y, char ch, uint8_t fg, int scale) {
+    int gx, gy, dx, dy;
+    const uint8_t *rows;
+
+    if (ch < FONT_FIRST || ch >= FONT_FIRST + FONT_COUNT)
+        ch = '?';
+    rows = font8x8[ch - FONT_FIRST];
+    for (gy = 0; gy < FONT_H; gy++) {
+        uint8_t bits = rows[gy];
+        for (gx = 0; gx < FONT_W; gx++) {
+            if (bits & (1u << gx)) {
+                for (dy = 0; dy < scale; dy++)
+                    for (dx = 0; dx < scale; dx++)
+                        gfx_putpixel(x + gx * scale + dx,
+                                     y + gy * scale + dy, fg);
+            }
+        }
+    }
+}
+
+/* draw a string with 8*scale pixel advance per character */
+void gfx_draw_text(int x, int y, const char *s, uint8_t fg, int scale) {
+    while (*s) {
+        gfx_draw_char(x, y, *s++, fg, scale);
+        x += FONT_W * scale;
+    }
+}
+
+/* second deterministic demo picture (shell `text` command):
+   blue background + three text lines in different colors */
+void gfx_text_demo(void) {
+    gfx_fill_rect(0, 0, GFX_W, GFX_H, 0x01);
+    gfx_draw_text(104, 24, "GRID OS", 0x0F, 2);
+    gfx_draw_text(84, 80, "everything computes", 0x0E, 1);
+    gfx_draw_text(96, 120, "0123456789ABCDEF", 0x0A, 1);
 }
