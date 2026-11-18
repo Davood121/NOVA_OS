@@ -121,6 +121,15 @@ void pit_init(void);
 void pit_irq(void);
 uint32_t pit_uptime_ms(void);
 
+/* ---- tasks / scheduler (v0.9) ---- */
+void sched_init(void);
+void task_tick(void *regs);          /* called from isr_dispatch on IRQ0 */
+int task_spawn(const char *name, void (*entry)(void));
+void task_print_list(void);
+int task_alive_count(void);
+int task_current_pid(void);
+uint32_t task_counter(int pid);
+
 /* ---- rtc ---- */
 void rtc_init(void);
 void rtc_read(uint8_t *sec, uint8_t *min, uint8_t *hour,
