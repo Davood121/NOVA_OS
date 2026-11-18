@@ -112,6 +112,9 @@ void gfx_text_restore(void);
 void gfx_putpixel(int x, int y, uint8_t c);
 void gfx_fill_rect(int x, int y, int w, int h, uint8_t c);
 void gfx_demo_draw(void);
+void gfx_draw_char(int x, int y, char ch, uint8_t fg, int scale);
+void gfx_draw_text(int x, int y, const char *s, uint8_t fg, int scale);
+void gfx_text_demo(void);
 
 /* ---- pit / time ---- */
 void pit_init(void);
