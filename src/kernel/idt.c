@@ -103,6 +103,10 @@ void isr_dispatch(void *rp) {
     }
     uint8_t irq = (uint8_t)(r->int_no - 32);
     if (irq < IRQ_COUNT && irq_handlers[irq]) irq_handlers[irq]();
+    /* GRID OS v0.9: scheduler hook - may switch away on the timer tick
+     * (task_resume noreturns; the interrupted task's own frame resumes
+     * later and ends up back here to EOI its tick) */
+    if (irq == 0) task_tick(r);
     pic_eoi(irq);
 }
 
