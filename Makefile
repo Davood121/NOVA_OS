@@ -32,6 +32,8 @@ KRNL_SRCS  = src/kernel/entry.S \
              src/kernel/fs.c \
              src/kernel/pit.c \
              src/kernel/cpu.c \
+             src/kernel/task.c \
+             src/kernel/taskasm.S \
              src/kernel/gfx.c \
              src/kernel/shell.c \
              src/kernel/util.c
