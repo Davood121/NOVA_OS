@@ -4,7 +4,7 @@ A from-scratch operating system: custom bootloader, custom 32-bit kernel,
 custom shell. No Linux, no BSD — every byte of this OS is ours.
 See `BLUEPRINT.md` for the full long-term design (the reactive cell-graph OS).
 
-## Current status (v0.7 — graphics milestone)
+## Current status (v0.8 — graphics text milestone)
 
 - Custom BIOS stage-1 bootloader (512 bytes): captures the e820 memory map,
   loads the kernel via BIOS int 13h (LBA with CHS fallback), enables the A20
@@ -34,7 +34,7 @@ See `BLUEPRINT.md` for the full long-term design (the reactive cell-graph OS).
   mode, scrubs the firmware CPU state (paging, PAE, EFER long-mode bits),
   rebuilds the kernel's GDT and drops to 32-bit protected mode. Both boot
   paths (legacy BIOS and UEFI) are boot-tested on every push in CI.
-- **VGA graphics (new in v0.7):** mode 13h graphics driver (`gfx.c`) — 320x200
+- **VGA graphics (v0.7):** mode 13h graphics driver (`gfx.c`) — 320x200
   in 256 colors via direct VGA register programming (no BIOS calls, safe from
   protected mode), with `gfx_putpixel` / `gfx_fill_rect` and a clean restore
   to text mode. The shell gets a `demo` command: it flips to graphics mode,
@@ -44,11 +44,20 @@ See `BLUEPRINT.md` for the full long-term design (the reactive cell-graph OS).
   verifies **all 51200 visible pixels** pixel-for-pixel against the expected
   picture (QEMU's mode-13h double-dotted surface model + the vgabios default
   DAC palette), then verifies the clean return to 80x25 text mode.
+- **Bitmap-font text rendering (v0.8):** a public-domain 8x8 font
+  (`font.h`, ASCII 32-127) rendered in graphics mode via
+  `gfx_draw_char` / `gfx_draw_text` — every glyph scaled on the fly and
+  drawn foreground-only (transparent background). The shell gets a `text`
+  command that flips to graphics mode and draws a second deterministic
+  picture (title + two text lines), then restores text mode on a keypress.
+  The CI graphics job now drives **both** demos over QMP and verifies **each
+  screen all 51200/51200 pixels** against a glyph-accurate replica of the
+  font data, plus both text-mode restores.
 - Interactive shell (`grid>`) with commands:
   `help`, `clear`, `echo`, `meminfo`, `memstat`, `hexdump`, `sleep`, `rand`,
   `blkstat`, `atainfo`, `ataread <lba>`, `ls`, `write <name> <text>`,
   `cat <name>`, `rm <name>`, `fsinfo`, `mkfs yes`, `uptime`, `date`,
-  `cpuinfo`, `demo`, `reboot`.
+  `cpuinfo`, `demo`, `text`, `reboot`.
 
 ## Build
 
@@ -90,7 +99,7 @@ Or use [balenaEtcher](https://etcher.balena.io/) / Rufus (select the .img file).
 3. Boot from the USB stick — **either legacy/BIOS/CSM mode or UEFI mode
    both work now**.
 4. You should see the GRID banner and the `grid>` prompt.
-5. Type `demo` at the prompt to see the first graphics output.
+5. Type `demo` and then `text` at the prompt to see the graphics output.
 
 Notes:
 - **UEFI boot:** use the `BOOTX64.EFI` from the CI artifact instead of
@@ -127,6 +136,7 @@ src/kernel/kernel.ld   kernel linker script (linked at 0x8000)
 src/kernel/main.c      kernel entry (kmain)
 src/kernel/console.c   VGA text console
 src/kernel/gfx.c       VGA mode-13h graphics (320x200x256, text restore)
+src/kernel/font.h      8x8 public-domain bitmap font (ASCII 32-127)
 src/kernel/kbd.c       PS/2 keyboard driver (IRQ ring buffer)
 src/kernel/idt.c       IDT, ISR dispatch, exception registry
 src/kernel/isr.S       interrupt stubs (0-47)
@@ -155,6 +165,7 @@ uefi/uefi.ld           UEFI loader linker script
 5. **v0.6** ✅ — UEFI boot (hand-rolled PE32+ loader, CI-tested on OVMF)
 6. **v0.7** ✅ — VGA graphics: mode 13h driver + `demo` shell command,
    pixel-for-pixel verified in CI (51200/51200 visible pixels)
-7. **v0.8** — text/font rendering in graphics mode, userland processes,
-   capability security, graphics compositor
-8. **v1.0** — the GRID reactive cell-graph userland (Phase 0 semantics in-kernel)
+7. **v0.8** ✅ — bitmap-font text rendering in graphics mode + `text`
+   shell command, pixel-verified in CI (51200/51200 pixels per screen)
+8. **v0.9** — userland processes, capability security, graphics compositor
+9. **v1.0** — the GRID reactive cell-graph userland (Phase 0 semantics in-kernel)
