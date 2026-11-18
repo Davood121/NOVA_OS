@@ -92,3 +92,98 @@ jobs:
             /tmp/ovmf.log
             /tmp/serial.log
           if-no-files-found: ignore
+
+  graphics-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc-multilib qemu-system-x86
+
+      - name: Build (interactive, no exit hook)
+        run: make
+
+      - name: Drive graphics demo over QMP and verify pixels
+        run: |
+          set -e
+          qemu-system-i386 -fda grid-os.img -display none -no-reboot -net none \
+            -qmp unix:/tmp/qmp.sock,server,nowait > /tmp/qemu.out 2>&1 &
+          QPID=$!
+          python3 - <<'PYEOF'
+          import socket, json, time
+
+          class QMP:
+              def __init__(self, path):
+                  self.s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                  self.s.connect(path)
+                  self.f = self.s.makefile('rw')
+                  json.loads(self.f.readline())
+                  self.cmd('qmp_capabilities')
+              def cmd(self, name, **args):
+                  self.f.write(json.dumps({'execute': name, 'arguments': args}) + '\n')
+                  self.f.flush()
+                  while True:
+                      line = json.loads(self.f.readline())
+                      if 'return' in line or 'error' in line:
+                          return line
+
+          q = QMP('/tmp/qmp.sock')
+          time.sleep(3)
+          for key in ['d', 'e', 'm', 'o', 'ret']:
+              q.cmd('send-key', keys=[{'type': 'qcode', 'data': key}])
+              time.sleep(0.2)
+          time.sleep(3)
+          q.cmd('screendump', filename='/tmp/gfx.ppm')
+          time.sleep(1)
+          q.cmd('send-key', keys=[{'type': 'qcode', 'data': 'q'}])
+          time.sleep(2)
+          q.cmd('screendump', filename='/tmp/text.ppm')
+          time.sleep(0.5)
+          q.cmd('quit')
+          PYEOF
+          wait $QPID || true
+          python3 - <<'PYEOF'
+          def load_ppm(path):
+              with open(path, 'rb') as f:
+                  assert f.readline().strip() == b'P6'
+                  line = f.readline()
+                  while line.startswith(b'#'):
+                      line = f.readline()
+                  w, h = map(int, line.split())
+                  f.readline()
+                  return w, h, f.read(w * h * 3)
+
+          w, h, px = load_ppm('/tmp/gfx.ppm')
+          assert (w, h) in ((320, 200), (640, 400)), 'bad mode-13h size: %s' % ((w, h),)
+          sx, sy = w // 320, h // 200
+          def pix(x, y):
+              i = ((y * sy + sy // 2) * w + (x * sx + sx // 2)) * 3
+              return px[i], px[i + 1], px[i + 2]
+          checks = [
+              ((10, 4),   (0, 0, 0)),      # palette block 0: black
+              ((210, 4),  (0, 170, 0)),    # block 10: light green
+              ((290, 4),  (170, 170, 0)),  # block 14: yellow
+              ((20, 16),  (170, 0, 0)),    # accent rect: light red
+          ]
+          for (x, y), exp in checks:
+              got = pix(x, y)
+              assert got == exp, 'pixel (%d,%d): got %s want %s' % (x, y, got, exp)
+          colors = {px[i:i + 3] for i in range(0, len(px), 3)}
+          assert len(colors) >= 64, 'too few distinct colors: %d' % len(colors)
+          tw, th, _ = load_ppm('/tmp/text.ppm')
+          assert (tw, th) == (720, 400), 'text mode not restored: %dx%d' % (tw, th)
+          print('GFX OK: mode 13h %dx%d, %d colors, pixel checks passed; text mode restored %dx%d' % (w, h, len(colors), tw, th))
+          PYEOF
+
+      - name: Upload screendumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gfx-screendumps
+          path: |
+            /tmp/gfx.ppm
+            /tmp/text.ppm
+          if-no-files-found: ignore
