@@ -104,6 +104,15 @@ uint32_t fs_capacity_sectors(void);
 void fs_print_info(void);
 void fs_print_list(void);
 
+/* ---- graphics (vga mode 13h, v0.7) ---- */
+#define GFX_W 320
+#define GFX_H 200
+void gfx_mode13(void);
+void gfx_text_restore(void);
+void gfx_putpixel(int x, int y, uint8_t c);
+void gfx_fill_rect(int x, int y, int w, int h, uint8_t c);
+void gfx_demo_draw(void);
+
 /* ---- pit / time ---- */
 void pit_init(void);
 void pit_irq(void);
