@@ -155,27 +155,64 @@ jobs:
                   w, h = map(int, line.split())
                   f.readline()
                   return w, h, f.read(w * h * 3)
-
-          w, h, px = load_ppm('/tmp/gfx.ppm')
-          assert (w, h) in ((320, 200), (640, 400)), 'bad mode-13h size: %s' % ((w, h),)
-          sx, sy = w // 320, h // 200
-          def pix(x, y):
-              i = ((y * sy + sy // 2) * w + (x * sx + sx // 2)) * 3
-              return px[i], px[i + 1], px[i + 2]
-          checks = [
-              ((10, 4),   (0, 0, 0)),      # palette block 0: black
-              ((210, 4),  (0, 170, 0)),    # block 10: light green
-              ((290, 4),  (170, 170, 0)),  # block 14: yellow
-              ((20, 16),  (170, 0, 0)),    # accent rect: light red
+          
+          # Mode 13h on QEMU std VGA: non-VBE bpp is 0, so QEMU renders through the
+          # VGA_DRAW_LINE8D2 double-dotted path: the screendump surface is 512x400,
+          # each framebuffer byte becomes a 2x2 pixel block, and only FB columns 0-255
+          # are shown. FB(x, y) appears at surface(2x, 2y).
+          #
+          # Color = the vgabios default DAC entry indexed by the FB byte: bytes 0-63
+          # index the 64-color default palette below, bytes 64-255 hit DAC entries
+          # zeroed by vgabios (black). 6-bit DAC components are scaled
+          # c6_to_8(v) = (v<<2)|(b<<1)|b, e.g. 21 -> 87, 42 -> 168.
+          # Table derived from a screendump of this exact demo and cross-checked on
+          # two independent framebuffer rows for all 256 values.
+          PAL = [
+              (0,0,0),(0,0,168),(0,168,0),(0,168,168),(168,0,0),(168,0,168),
+              (168,168,0),(168,168,168),(0,0,87),(0,0,255),(0,168,87),(0,168,255),
+              (168,0,87),(168,0,255),(168,168,87),(168,168,255),
+              (0,87,0),(0,87,168),(0,255,0),(0,255,168),(168,87,0),(168,87,168),
+              (168,255,0),(168,255,168),(0,87,87),(0,87,255),(0,255,87),(0,255,255),
+              (168,87,87),(168,87,255),(168,255,87),(168,255,255),
+              (87,0,0),(87,0,168),(87,168,0),(87,168,168),(255,0,0),(255,0,168),
+              (255,168,0),(255,168,168),(87,0,87),(87,0,255),(87,168,87),(87,168,255),
+              (255,0,87),(255,0,255),(255,168,87),(255,168,255),
+              (87,87,0),(87,87,168),(87,255,0),(87,255,168),(255,87,0),(255,87,168),
+              (255,255,0),(255,255,168),(87,87,87),(87,87,255),(87,255,87),(87,255,255),
+              (255,87,87),(255,87,255),(255,255,87),(255,255,255),
           ]
-          for (x, y), exp in checks:
-              got = pix(x, y)
-              assert got == exp, 'pixel (%d,%d): got %s want %s' % (x, y, got, exp)
-          colors = {px[i:i + 3] for i in range(0, len(px), 3)}
-          assert len(colors) >= 64, 'too few distinct colors: %d' % len(colors)
+          
+          def fbval(x, y):
+              # exact replica of gfx_demo_draw()
+              if 10 <= x < 50 and 12 <= y < 24:
+                  return 0x0C                      # accent rect
+              if y < 8:
+                  return x // 20                   # 16-color palette bar
+              return (x ^ y) & 0xFF                # xor gradient
+          
+          w, h, px = load_ppm('/tmp/gfx.ppm')
+          assert (w, h) == (512, 400), 'bad mode-13h surface: %dx%d' % (w, h)
+          
+          def spix(x, y):
+              i = (y * 2 * w + x * 2) * 3
+              return px[i], px[i + 1], px[i + 2]
+          
+          # verify EVERY visible pixel (FB x 0-255, y 0-199) against the expected
+          # demo picture: 51200 pixel probes, starting with the palette bar and the
+          # accent rect, then the full xor gradient
+          bad = []
+          for y in range(200):
+              for x in range(256):
+                  v = fbval(x, y)
+                  want = PAL[v] if v < 64 else (0, 0, 0)
+                  if spix(x, y) != want:
+                      bad.append((x, y, spix(x, y), want))
+          assert not bad, 'mismatched pixels (first 5): %s' % (bad[:5],)
+          assert not any(c == (0, 0, 0) for c in PAL[1:]), 'palette degenerated'
+          
           tw, th, _ = load_ppm('/tmp/text.ppm')
           assert (tw, th) == (720, 400), 'text mode not restored: %dx%d' % (tw, th)
-          print('GFX OK: mode 13h %dx%d, %d colors, pixel checks passed; text mode restored %dx%d' % (w, h, len(colors), tw, th))
+          print('GFX OK: 51200/51200 pixels match expected demo picture; text mode restored %dx%d' % (tw, th))
           PYEOF
 
       - name: Upload screendumps
