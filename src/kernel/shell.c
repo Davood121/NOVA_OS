@@ -56,6 +56,8 @@ static void cmd_help(void) {
         "  cpuinfo  - cpu vendor and model\n"
         "  demo     - 320x200x256 graphics demo (any key returns)\n"
         "  text     - graphics bitmap-font text demo (any key returns)\n"
+        "  ps       - list tasks and their scheduler stats (v0.9)\n"
+        "  spawn    - start a demo worker task (multitasking live)\n"
         "  reboot   - restart machine\n");
 }
 
@@ -264,6 +266,35 @@ static void cmd_mkfs(const char *args) {
     console_puts("mkfs: disk formatted\n");
 }
 
+/* GRID OS v0.9: demo worker task - keeps counting while the shell
+ * keeps running; watch its counter rise with 'ps' */
+static volatile uint32_t worker_counter;
+static void worker_main(void) {
+    for (;;) {
+        worker_counter++;
+        for (volatile int i = 0; i < 20000; i++) { }
+    }
+}
+
+static void cmd_spawn(void) {
+    int pid = task_spawn("worker", worker_main);
+    if (pid < 0) {
+        console_puts("spawn failed: task table full or out of memory\n");
+        return;
+    }
+    console_puts("spawned worker task, pid ");
+    console_putdec((uint32_t)pid);
+    console_puts(" - it is now running alongside this shell; type 'ps'\n");
+    console_puts("to watch its counter rise while the shell stays live\n");
+}
+
+static void cmd_ps(void) {
+    console_puts("pid  name         state    counter\n");
+    task_print_list();
+    console_putdec(task_alive_count());
+    console_puts(" task(s) alive\n");
+}
+
 static void cmd_demo(void) {
     console_puts("switching to 320x200x256 - press any key to return\n");
     gfx_mode13();
@@ -326,6 +357,8 @@ static void exec(char *line) {
     else if (!strcmp(line, "cpuinfo")) cpu_print_info();
     else if (!strcmp(line, "demo")) cmd_demo();
     else if (!strcmp(line, "text")) cmd_text();
+    else if (!strcmp(line, "ps")) cmd_ps();
+    else if (!strcmp(line, "spawn")) cmd_spawn();
     else if (!strcmp(line, "reboot")) cmd_reboot();
     else {
         console_puts("unknown command: ");
